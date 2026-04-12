@@ -26,7 +26,11 @@ object ComponentManager {
     }
 
     fun syncAll(context: Context, serviceRunning: Boolean, smsEnabled: Boolean) {
-        // SmsReceiver is only active if the global service is running AND SMS feature is enabled
-        setComponentEnabled(context, SmsReceiver::class.java, serviceRunning && smsEnabled)
+        // SMS Receiver needs to be registered with the system to capture broadcasts.
+        // To ensure reliable logging and capture, we enable the component whenever the service is RUNNING.
+        // Inner logic in SmsReceiver will still respect the specific "SMS Forwarding" toggle.
+        setComponentEnabled(context, SmsReceiver::class.java, serviceRunning)
+
+        Log.d(TAG, "SyncAll: serviceRunning=$serviceRunning (SMS Receiver is now synchronized with service state)")
     }
 }
