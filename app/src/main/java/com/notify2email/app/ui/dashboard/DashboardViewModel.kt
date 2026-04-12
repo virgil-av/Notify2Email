@@ -6,6 +6,7 @@ import com.notify2email.app.domain.model.Event
 import com.notify2email.app.domain.model.SentStatus
 import com.notify2email.app.domain.model.EventType
 import com.notify2email.app.domain.repository.EventRepository
+import com.notify2email.app.domain.repository.PermissionRepository
 import com.notify2email.app.domain.repository.ServiceStateRepository
 import com.notify2email.app.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,7 +23,8 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(
     private val eventRepository: EventRepository,
     private val serviceStateRepository: ServiceStateRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val permissionRepository: PermissionRepository
 ) : ViewModel() {
 
     private val _validationDialog = MutableStateFlow<List<String>?>(null)
@@ -66,23 +68,35 @@ class DashboardViewModel(
         initialValue = UiState()
     )
 
-    fun startService() {
+    fun startService(force: Boolean = false) {
         viewModelScope.launch {
             val settings = settingsRepository.getSettings()
+            val permissionState = permissionRepository.getPermissionState()
             val missingItems = mutableListOf<String>()
 
+            // SMTP Checks
             if (settings.host.isBlank()) missingItems.add("SMTP host")
             if (settings.port <= 0) missingItems.add("SMTP port")
             if (settings.toEmailPrimary.isBlank()) missingItems.add("Recipient email")
+            
+            // Event Type Checks
             if (!settings.smsEnabled && !settings.callsEnabled && !settings.notificationsEnabled) {
                 missingItems.add("At least one event type (SMS/Calls/Notifications)")
             }
 
-            if (missingItems.isNotEmpty()) {
+            // Permission Checks
+            if (!permissionState.smsGranted && settings.smsEnabled) missingItems.add("SMS Permission")
+            if (!permissionState.callLogGranted && settings.callsEnabled) missingItems.add("Call Log Permission")
+            if (!permissionState.notificationAccessGranted && (settings.notificationsEnabled || settings.smsEnabled || settings.callsEnabled)) {
+                 missingItems.add("Notification Access")
+            }
+
+            if (!force) {
                 _validationDialog.value = missingItems
                 return@launch
             }
 
+            _validationDialog.value = null
             serviceStateRepository.startService()
         }
     }

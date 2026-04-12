@@ -87,8 +87,8 @@ class MainActivity : ComponentActivity() {
                     smtpSettings = settingsState.settings,
                     notificationFilterSettings = settingsState.notificationFilterSettings,
                     permissionState = permissionsState.permissionState,
-                    onToggleService = {
-                        handleServiceToggle(dashboardState.isServiceRunning)
+                    onToggleService = { force ->
+                        handleServiceToggle(dashboardState.isServiceRunning, force)
                     },
                     onSmsToggleChanged = dashboardViewModel::setSmsEnabled,
                     onCallsToggleChanged = dashboardViewModel::setCallsEnabled,
@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
         permissionsViewModel.refreshPermissions()
     }
 
-    private fun handleServiceToggle(isRunning: Boolean) {
+    private fun handleServiceToggle(isRunning: Boolean, force: Boolean = false) {
         if (isRunning) {
             dashboardViewModel.stopService()
             return
@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        dashboardViewModel.startService()
+        dashboardViewModel.startService(force)
     }
 
     private fun hasPermission(permission: String): Boolean {

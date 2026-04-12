@@ -20,7 +20,8 @@ class AppViewModelFactory(
                 DashboardViewModel(
                     eventRepository = appContainer.eventRepository,
                     serviceStateRepository = appContainer.serviceStateRepository,
-                    settingsRepository = appContainer.settingsRepository
+                    settingsRepository = appContainer.settingsRepository,
+                    permissionRepository = appContainer.permissionRepository
                 ) as T
             }
 

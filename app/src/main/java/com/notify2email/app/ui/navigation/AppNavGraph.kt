@@ -41,7 +41,7 @@ fun AppNavGraph(
     smtpSettings: SmtpSettings,
     notificationFilterSettings: NotificationFilterSettings,
     permissionState: PermissionState,
-    onToggleService: () -> Unit,
+    onToggleService: (force: Boolean) -> Unit,
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
     onNotificationsToggleChanged: (Boolean) -> Unit,

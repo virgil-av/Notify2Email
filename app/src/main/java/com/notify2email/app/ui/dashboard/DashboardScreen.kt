@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Message
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
@@ -27,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -35,14 +38,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.clickable
 import com.notify2email.app.domain.model.Event
 import com.notify2email.app.domain.model.EventType
 import com.notify2email.app.domain.model.PermissionState
@@ -55,7 +67,7 @@ fun DashboardScreen(
     permissionState: PermissionState,
     validationDialogMissingItems: List<String>?,
     dismissalConfirmation: DashboardViewModel.DismissalTarget?,
-    onToggleService: () -> Unit,
+    onToggleService: (force: Boolean) -> Unit,
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
     onNotificationsToggleChanged: (Boolean) -> Unit,
@@ -85,7 +97,7 @@ fun DashboardScreen(
             StatusCard(
                 isRunning = uiState.isServiceRunning,
                 lastSyncMillis = uiState.lastSyncMillis,
-                onToggleService = onToggleService
+                onToggleService = { onToggleService(false) }
             )
 
             if (uiState.showSmtpWarning && !uiState.isSmtpConfigured) {
@@ -139,6 +151,8 @@ fun DashboardScreen(
                 onNotificationsToggleChanged = onNotificationsToggleChanged
             )
 
+            FooterSection()
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -146,19 +160,52 @@ fun DashboardScreen(
     validationDialogMissingItems?.let { missingItems ->
         AlertDialog(
             onDismissRequest = onDismissValidationDialog,
-            title = { Text("Configuration Required") },
+            title = { Text("Start Event Capture") },
             text = {
-                Column {
-                    Text("Please configure the following items before starting the service:")
-                    Spacer(Modifier.height(8.dp))
-                    missingItems.forEach { item ->
-                        Text("• $item", style = MaterialTheme.typography.bodyMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "The service will run in the background to capture your selected phone events and forward them to your configured email address.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    if (missingItems.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Warning: Some items require attention:",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            missingItems.forEach { item ->
+                                Text(
+                                    text = "• $item",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
                     }
+
+                    Text(
+                        text = "Would you like to start the service now?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = { onNavigateToSettings(null) }) {
-                    Text("Go to Settings")
+                Button(
+                    onClick = { onToggleService(true) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (missingItems.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Continue and Start")
                 }
             },
             dismissButton = {
@@ -284,63 +331,72 @@ private fun WarningCard(
             containerColor = MaterialTheme.colorScheme.errorContainer
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top
+        Box(modifier = Modifier.fillMaxWidth()) {
+            IconButton(
+                onClick = onDismissClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(32.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(top = 2.dp)
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Dismiss",
+                    tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp)
                 )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                TextButton(
-                    onClick = onDismissClick,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                Row(
+                    modifier = Modifier.padding(end = 24.dp), // Space for close button
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
-                ) {
-                    Text("Dismiss")
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onFixClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onError,
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Fix Now")
+                    Button(
+                        onClick = onFixClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onError,
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("Fix Now")
+                    }
                 }
             }
         }
@@ -433,71 +489,159 @@ private fun EventToggleCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Event Types",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Select which event types should be forwarded to your email address.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            EventToggleRow(
-                icon = Icons.AutoMirrored.Outlined.Message,
-                label = "SMS",
-                checked = smsEnabled,
-                onCheckedChange = onSmsToggleChanged
-            )
-            EventToggleRow(
-                icon = Icons.Outlined.Call,
-                label = "Calls",
-                checked = callsEnabled,
-                onCheckedChange = onCallsToggleChanged
-            )
-            EventToggleRow(
-                icon = Icons.Outlined.Notifications,
-                label = "Notifications",
-                checked = notificationsEnabled,
-                onCheckedChange = onNotificationsToggleChanged
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Capture Events",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                var showInfo by remember { mutableStateOf(false) }
+                
+                Box {
+                    IconButton(
+                        onClick = { showInfo = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "Info",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    if (showInfo) {
+                        AlertDialog(
+                            onDismissRequest = { showInfo = false },
+                            title = { Text("Event Types") },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Select which activities should be forwarded to your email:")
+                                    Text("• SMS: Incoming text messages from your default SMS app.")
+                                    Text("• Calls: Missed, rejected, or ignored calls.")
+                                    Text("• Apps: Notifications from other selected applications.")
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showInfo = false }) {
+                                    Text("Got it")
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CompactToggle(
+                    icon = Icons.AutoMirrored.Outlined.Message,
+                    label = "SMS",
+                    checked = smsEnabled,
+                    onCheckedChange = onSmsToggleChanged,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactToggle(
+                    icon = Icons.Outlined.Call,
+                    label = "Calls",
+                    checked = callsEnabled,
+                    onCheckedChange = onCallsToggleChanged,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactToggle(
+                    icon = Icons.Outlined.Notifications,
+                    label = "Apps",
+                    checked = notificationsEnabled,
+                    onCheckedChange = onNotificationsToggleChanged,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun EventToggleRow(
+private fun CompactToggle(
     icon: ImageVector,
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (checked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.scale(0.7f)
+        )
+    }
+}
+
+@Composable
+private fun FooterSection() {
+    val uriHandler = LocalUriHandler.current
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .clickable { uriHandler.openUri("https://github.com/virgil-av/Notify2Email") }
+                .padding(4.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = MaterialTheme.colorScheme.primary
+            // Using a simple text for "GitHub" as we don't have the SVG icon in standard Icons
+            Text(
+                text = "GitHub",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                textDecoration = TextDecoration.Underline
             )
             Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall
+                text = "Notify2Email",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
+        
+        Text(
+            text = "Version 1.0",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
     }
 }
@@ -522,7 +666,7 @@ private fun DashboardScreenPreview() {
                 postNotificationsGranted = true,
                 batteryOptimizationIgnored = false
             ),
-            onToggleService = {},
+            onToggleService = { _ -> },
             onSmsToggleChanged = {},
             onCallsToggleChanged = {},
             onNotificationsToggleChanged = {},
