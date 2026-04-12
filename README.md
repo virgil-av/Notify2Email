@@ -7,6 +7,10 @@ Notify2Email is an Android utility application that monitors your phone's events
 -   **Notification Forwarding**: Captures notifications from selected apps and sends them via email.
 -   **Call Logging**: Specifically identifies and labels "MISSED CALL" and "PHONE CALL" events.
 -   **SMS Forwarding**: Forwards incoming text messages.
+-   **Advanced Email Routing**:
+    -   **Multi-Recipient Support**: Add multiple **CC** and **BCC** addresses to keep different accounts or people in the loop.
+    -   **Flexible Notifications**: Use CC for visible transparency among recipients or BCC for private archival and monitoring.
+-   **Customizable Email Subjects**: Define a **Custom Subject Pattern** to easily filter, search, or categorize incoming event emails in your inbox.
 -   **Smart Deduplication**: Prevents redundant logs from system communication apps (like default dialers and SMS apps) to avoid double-reporting.
 -   **Event Batching**: Batches events to reduce the number of emails sent.
 -   **Customizable Filters**: Control which apps are allowed to send notifications.
@@ -15,11 +19,16 @@ Notify2Email is an Android utility application that monitors your phone's events
 
 ## Screenshots
 
-*Note: Replace these placeholders with actual screenshots from the `screenshots/` directory if available.*
+<p align="center">
+  <img src="docs/screenshots/Notify2Email_1.jpg" width="250" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_2.jpg" width="250" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_3.jpg" width="250" style="margin:5px;" />
+</p>
 
-| Dashboard | Access Settings | Logs |
-| :---: | :---: | :---: |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Access](docs/screenshots/access.png) | ![Logs](docs/screenshots/logs.png) |
+<p align="center">
+  <img src="docs/screenshots/Notify2Email_4.jpg" width="250" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_5.jpg" width="250" style="margin:5px;" />
+</p>
 
 ## Installation & Build
 

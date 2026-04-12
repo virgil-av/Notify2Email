@@ -90,7 +90,7 @@ androidComponents {
             if (char.isLowerCase()) char.titlecase() else char.toString()
         }
         val sourceDirectory = layout.buildDirectory.dir("outputs/apk/$variantName")
-        val customOutputDirectory = layout.buildDirectory.dir("outputs/custom-apk/$variantName")
+        val customOutputDirectory = layout.buildDirectory.dir("outputs/release-apk/$variantName")
 
         val versionName = android.defaultConfig.versionName ?: "1.0"
         val renameTask = tasks.register<Copy>("rename${capitalizedVariantName}Apk") {
