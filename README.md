@@ -21,7 +21,16 @@ Notify2Email is an Android utility application that monitors your phone's events
 
 *Note: Replace these placeholders with actual screenshots from the `screenshots/` directory if available.*
 
-![Dashboard](docs/screenshots/Notify2Email_1.jpg)  ![Events](docs/screenshots/Notify2Email_2.jpg) ![SMTP](docs/screenshots/Notify2Email_3.jpg) ![CC_BCC](docs/screenshots/Notify2Email_4.jpg) ![Filters](docs/screenshots/Notify2Email_5.jpg)
+<p align="center">
+  <img src="docs/screenshots/Notify2Email_1.jpg" width="300" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_2.jpg" width="300" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_3.jpg" width="300" style="margin:5px;" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/Notify2Email_4.jpg" width="300" style="margin:5px;" />
+  <img src="docs/screenshots/Notify2Email_5.jpg" width="300" style="margin:5px;" />
+</p>
 
 ## Installation & Build
 
