@@ -93,7 +93,6 @@ class MainActivity : ComponentActivity() {
                     onSmsToggleChanged = dashboardViewModel::setSmsEnabled,
                     onCallsToggleChanged = dashboardViewModel::setCallsEnabled,
                     onNotificationsToggleChanged = dashboardViewModel::setNotificationsEnabled,
-                    onHealthReportToggleChanged = dashboardViewModel::setHealthReportEnabled,
                     onDeleteEvent = eventsViewModel::deleteEvent,
                     onClearAllEvents = eventsViewModel::clearAllEvents,
                     onClearLogs = logsViewModel::clearLogs,

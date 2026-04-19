@@ -46,9 +46,17 @@ class DashboardViewModel(
         serviceStateRepository.observeServiceState(),
         eventRepository.observeEvents(),
         settingsRepository.observeSettings(),
+        eventRepository.observeOldestQueueTime(),
         _showSmtpWarning,
         _showPermissionWarning
-    ) { serviceState, events, settings, showSmtp, showPermission ->
+    ) { flows ->
+        val serviceState = flows[0] as com.notify2email.app.domain.model.ServiceState
+        val events = flows[1] as List<Event>
+        val settings = flows[2] as com.notify2email.app.domain.model.SmtpSettings
+        val oldestQueueTime = flows[3] as Long?
+        val showSmtp = flows[4] as Boolean
+        val showPermission = flows[5] as Boolean
+
         UiState(
             isServiceRunning = serviceState.isRunning,
             lastSyncMillis = serviceState.lastUpdatedMillis,
@@ -64,7 +72,8 @@ class DashboardViewModel(
             healthReportEnabled = settings.healthReportEnabled,
             isSmtpConfigured = settings.host.isNotBlank() && settings.port > 0 && settings.toEmailPrimary.isNotBlank(),
             showSmtpWarning = showSmtp,
-            showPermissionWarning = showPermission
+            showPermissionWarning = showPermission,
+            oldestQueueTimeMillis = oldestQueueTime
         )
     }.stateIn(
         scope = viewModelScope,
@@ -153,14 +162,6 @@ class DashboardViewModel(
 
     fun setHealthReportEnabled(enabled: Boolean) {
         updateEventToggle { copy(healthReportEnabled = enabled) }
-        viewModelScope.launch {
-            val settings = settingsRepository.getSettings()
-            WorkScheduler.scheduleHealthReport(
-                context = context,
-                intervalHours = settings.healthReportIntervalHours,
-                enabled = enabled
-            )
-        }
     }
 
     private fun updateEventToggle(transform: com.notify2email.app.domain.model.SmtpSettings.() -> com.notify2email.app.domain.model.SmtpSettings) {
@@ -183,7 +184,8 @@ class DashboardViewModel(
         val healthReportEnabled: Boolean = false,
         val isSmtpConfigured: Boolean = false,
         val showSmtpWarning: Boolean = true,
-        val showPermissionWarning: Boolean = true
+        val showPermissionWarning: Boolean = true,
+        val oldestQueueTimeMillis: Long? = null
     )
 
     enum class DismissalTarget {

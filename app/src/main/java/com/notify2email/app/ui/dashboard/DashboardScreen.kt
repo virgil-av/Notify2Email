@@ -42,6 +42,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -71,7 +77,6 @@ fun DashboardScreen(
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
     onNotificationsToggleChanged: (Boolean) -> Unit,
-    onHealthReportToggleChanged: (Boolean) -> Unit,
     onDismissValidationDialog: () -> Unit,
     onNavigateToSettings: (initialTab: Int?) -> Unit,
     onRequestDismissal: (DashboardViewModel.DismissalTarget) -> Unit,
@@ -98,6 +103,7 @@ fun DashboardScreen(
             StatusCard(
                 isRunning = uiState.isServiceRunning,
                 lastSyncMillis = uiState.lastSyncMillis,
+                oldestQueueTimeMillis = uiState.oldestQueueTimeMillis,
                 onToggleService = { onToggleService(false) }
             )
 
@@ -147,11 +153,9 @@ fun DashboardScreen(
                 smsEnabled = uiState.smsEnabled,
                 callsEnabled = uiState.callsEnabled,
                 notificationsEnabled = uiState.notificationsEnabled,
-                healthReportEnabled = uiState.healthReportEnabled,
                 onSmsToggleChanged = onSmsToggleChanged,
                 onCallsToggleChanged = onCallsToggleChanged,
-                onNotificationsToggleChanged = onNotificationsToggleChanged,
-                onHealthReportToggleChanged = onHealthReportToggleChanged
+                onNotificationsToggleChanged = onNotificationsToggleChanged
             )
 
             FooterSection()
@@ -252,6 +256,7 @@ fun DashboardScreen(
 private fun StatusCard(
     isRunning: Boolean,
     lastSyncMillis: Long,
+    oldestQueueTimeMillis: Long?,
     onToggleService: () -> Unit
 ) {
     Card(
@@ -299,8 +304,8 @@ private fun StatusCard(
                     onClick = onToggleService,
                     colors = if (isRunning) {
                         ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            containerColor = Color(0xFFD32F2F), // Distinct Red for Stop
+                            contentColor = Color.White
                         )
                     } else {
                         ButtonDefaults.buttonColors()
@@ -310,12 +315,31 @@ private fun StatusCard(
                 }
             }
 
-            if (lastSyncMillis > 0L) {
-                Text(
-                    text = "Last activity: ${TimeUtils.formatDateTime(lastSyncMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            val oldestQueueTime = oldestQueueTimeMillis
+            if (oldestQueueTime != null) {
+                var secondsLeft by remember(oldestQueueTime) {
+                    val elapsed = System.currentTimeMillis() - oldestQueueTime
+                    val remaining = (60000L - elapsed).coerceAtLeast(0L) / 1000
+                    mutableLongStateOf(remaining)
+                }
+
+                LaunchedEffect(oldestQueueTime) {
+                    while (secondsLeft > 0) {
+                        delay(1000)
+                        val elapsed = System.currentTimeMillis() - oldestQueueTime
+                        secondsLeft = (60000L - elapsed).coerceAtLeast(0L) / 1000
+                    }
+                }
+
+                if (secondsLeft > 0) {
+                    Text(
+                        text = "Event mail will be sent in: $secondsLeft seconds",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
         }
     }
@@ -480,11 +504,9 @@ private fun EventToggleCard(
     smsEnabled: Boolean,
     callsEnabled: Boolean,
     notificationsEnabled: Boolean,
-    healthReportEnabled: Boolean,
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
-    onNotificationsToggleChanged: (Boolean) -> Unit,
-    onHealthReportToggleChanged: (Boolean) -> Unit
+    onNotificationsToggleChanged: (Boolean) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -534,9 +556,6 @@ private fun EventToggleCard(
                                     Text("• SMS: Incoming text messages.")
                                     Text("• Calls: Missed, rejected, or ignored calls.")
                                     Text("• Apps: Notifications from other selected applications.")
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text("System Status Reports:", fontWeight = FontWeight.Bold)
-                                    Text("• Health: Periodic report (every 1-3 hours) containing battery level, screen state, and pending notifications.")
                                 }
                             },
                             confirmButton = {
@@ -551,7 +570,7 @@ private fun EventToggleCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CompactToggle(
@@ -573,13 +592,6 @@ private fun EventToggleCard(
                     label = "Apps",
                     checked = notificationsEnabled,
                     onCheckedChange = onNotificationsToggleChanged,
-                    modifier = Modifier.weight(1f)
-                )
-                CompactToggle(
-                    icon = Icons.Outlined.Info,
-                    label = "Health",
-                    checked = healthReportEnabled,
-                    onCheckedChange = onHealthReportToggleChanged,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -654,7 +666,7 @@ private fun FooterSection() {
         }
         
         Text(
-            text = "Version 1.0",
+            text = "Version 1.1",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
@@ -685,7 +697,6 @@ private fun DashboardScreenPreview() {
             onSmsToggleChanged = {},
             onCallsToggleChanged = {},
             onNotificationsToggleChanged = {},
-            onHealthReportToggleChanged = {},
             validationDialogMissingItems = null,
             dismissalConfirmation = null,
             onDismissValidationDialog = {},

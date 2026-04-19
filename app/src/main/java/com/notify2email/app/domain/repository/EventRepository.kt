@@ -12,4 +12,5 @@ interface EventRepository {
     suspend fun getSentCount(type: EventType): Int
     suspend fun deleteEvent(id: String)
     suspend fun deleteAllEvents()
+    fun observeOldestQueueTime(): Flow<Long?>
 }

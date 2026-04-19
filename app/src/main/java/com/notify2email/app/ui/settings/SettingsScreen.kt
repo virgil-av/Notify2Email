@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -611,6 +612,17 @@ private fun SmtpSection(
                         Spacer(Modifier.width(8.dp))
                         Text("Health Report Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
+                    IconButton(
+                        onClick = { onShowInfo("Health Report", "The Health Report is a periodic status update sent to your email. It includes information about the device's battery level, screen status, and any pending event notifications. This helps you ensure the device is online and the app is monitoring correctly.") },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 
                 ListItem(
@@ -626,18 +638,32 @@ private fun SmtpSection(
                 )
 
                 if (healthReportEnabled) {
-                    Text("Report Interval", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
+                    Text("Report Interval (Hours)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        listOf(1, 2, 3).forEach { hours ->
-                            FilterChip(
-                                selected = healthReportIntervalHours == hours,
-                                onClick = { healthReportIntervalHours = hours },
-                                label = { Text("$hours ${if (hours == 1) "Hour" else "Hours"}") },
-                                modifier = Modifier.weight(1f)
-                            )
+                        IconButton(
+                            onClick = { if (healthReportIntervalHours > 1) healthReportIntervalHours-- },
+                            enabled = healthReportIntervalHours > 1
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                        }
+                        
+                        Text(
+                            text = healthReportIntervalHours.toString(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        
+                        IconButton(
+                            onClick = { if (healthReportIntervalHours < 24) healthReportIntervalHours++ },
+                            enabled = healthReportIntervalHours < 24
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase")
                         }
                     }
                 }

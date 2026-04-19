@@ -29,7 +29,7 @@ class AppContainer(
     val notificationFilterManager by lazy { NotificationFilterManager(appContext) }
 
     val eventRepository: EventRepository by lazy {
-        RoomEventRepository(database.eventDao())
+        RoomEventRepository(database.eventDao(), database.queuedEventDao())
     }
 
     val logRepository: LogRepository by lazy {
