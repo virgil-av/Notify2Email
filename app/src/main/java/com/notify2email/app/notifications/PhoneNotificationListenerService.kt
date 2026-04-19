@@ -87,7 +87,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         notificationFilterManager.recordDetectedApp(event.packageName, event.appName)
 
         // 3. Determine Smart Event Type and check corresponding feature flag
-        val smartEventType = NotificationClassifier.getSmartEventType(packageName, contentResolver)
+        val smartEventType = NotificationClassifier.getSmartEventType(packageName, event.category, contentResolver)
         val eventType = smartEventType ?: EventType.NOTIFICATION
         
         val featureKey = when (eventType) {
@@ -171,10 +171,10 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         }
 
         // We used to filter out SYSTEM dialer call notifications because CallLogObserver handles them.
-        // However, to ensure reliability (fallback), we now allow them to pass through.
-        // The EventBatchQueueManager will handle deduplication if both capture the same event.
+        // However, to ensure reliability (fallback), we now only filter ACTIVE (ongoing) system calls.
+        // Once a call is missed or ended, the notification becomes non-ongoing, and we allow it.
         if (NotificationClassifier.isSystemDialer(event.packageName, contentResolver) && 
-            event.category == Notification.CATEGORY_CALL) {
+            event.category == Notification.CATEGORY_CALL && event.isOngoing) {
             return "redundant active system call"
         }
 
@@ -288,7 +288,7 @@ object NotificationClassifier {
         return packageName in knownDialers
     }
 
-    fun getSmartEventType(packageName: String, contentResolver: android.content.ContentResolver?): EventType? {
+    fun getSmartEventType(packageName: String, category: String?, contentResolver: android.content.ContentResolver?): EventType? {
         val sms = if (contentResolver != null) {
             android.provider.Telephony.Sms.getDefaultSmsPackage(null) // Context-free attempt
         } else null
@@ -306,6 +306,7 @@ object NotificationClassifier {
         return when {
             packageName in knownSms -> EventType.SMS
             packageName in voipApps -> EventType.CALL
+            category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_MISSED_CALL -> EventType.CALL
             contentResolver != null && isSystemDialer(packageName, contentResolver) -> EventType.CALL
             else -> null
         }
@@ -399,7 +400,8 @@ data class NotificationEvent(
             // Special handling for Calls (SIM or VOIP) to align with CallLogObserver
             if (category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_MISSED_CALL) {
                 val identity = (title ?: appName).replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
-                val window = (postTimeMillis.takeIf { it > 0 } ?: receivedAtMillis) / 20000
+                // 30-second window is enough to bridge the gap between Notification and CallLog
+                val window = (postTimeMillis.takeIf { it > 0 } ?: receivedAtMillis) / 30000
                 return "call_event|$identity|$window"
             }
             

@@ -51,9 +51,16 @@ class CallLogObserver(
             true,
             this
         )
-        // Perform initial catch-up scan
+        // Ensure we have a baseline on start to avoid capturing stale history.
         observerScope.launch {
-            processNewCalls(CallLog.Calls.CONTENT_URI)
+            processingMutex.withLock {
+                if (lastProcessedEntryId == -1L) {
+                    Log.i(TAG, "$DEBUG_PREFIX no baseline ID on register, seeding...")
+                    seedLastProcessedId(CallLog.Calls.CONTENT_URI)
+                } else {
+                    Log.i(TAG, "$DEBUG_PREFIX using existing baseline ID: $lastProcessedEntryId")
+                }
+            }
         }
     }
 
@@ -85,95 +92,91 @@ class CallLogObserver(
         // 1. Check global service status
         if (!container.serviceStateRepository.isServiceRunning()) {
             Log.d(TAG, "$DEBUG_PREFIX skipping because service is not running")
-            observerScope.launch {
-                container.logRepository.addLog("$DEBUG_PREFIX ignored: service state is OFF.")
-            }
             return
         }
 
         // 2. Check feature enablement
         if (!container.smtpConfigProvider.isFeatureEnabled(SmtpConfigProvider.KEY_CALL_LOGS_ENABLED)) {
             Log.d(TAG, "$DEBUG_PREFIX skipping because call log feature is disabled")
-            observerScope.launch {
-                container.logRepository.addLog("$DEBUG_PREFIX ignored: Call feature is disabled in settings.")
-            }
             return
         }
 
         observerScope.launch {
             processingMutex.withLock {
                 try {
-                    // Give the system a moment to finish writing the log entry.
-                    // Increased delay to ensure consistency across slower devices.
-                    Log.d(TAG, "$DEBUG_PREFIX change detected, waiting for write...")
-                    delay(3000)
+                    // Start with a small delay to let the system DB settle
+                    delay(2500)
 
                     if (ContextCompat.checkSelfPermission(
                             appContext,
                             android.Manifest.permission.READ_CALL_LOG
                         ) != PackageManager.PERMISSION_GRANTED
                     ) {
-                        Log.w(TAG, "$DEBUG_PREFIX skipping read because READ_CALL_LOG is not granted")
-                        container.logRepository.addLog(
-                            "$DEBUG_PREFIX error: READ_CALL_LOG permission not granted."
-                        )
+                        Log.w(TAG, "$DEBUG_PREFIX skipping read: permission missing")
                         return@withLock
                     }
 
-                    var currentLastId = lastProcessedEntryId
-                    Log.d(TAG, "$DEBUG_PREFIX checking for calls since ID: $currentLastId")
-                    var newCalls = queryNewCalls(uri, currentLastId)
+                    val currentLastId = lastProcessedEntryId
+                    if (currentLastId == -1L) {
+                        Log.i(TAG, "$DEBUG_PREFIX first trigger, seeding baseline.")
+                        seedLastProcessedId(uri)
+                        return@withLock
+                    }
 
-                    // Retry logic for slow database commits
-                    var retryCount = 0
-                    while (newCalls.isEmpty() && currentLastId != -1L && retryCount < 2) {
-                        retryCount++
-                        val retryDelay = 2000L * retryCount
-                        Log.d(TAG, "$DEBUG_PREFIX no new calls found, retry #$retryCount in ${retryDelay}ms...")
+                    // Check for ID reset (e.g., call log cleared or system DB maintenance)
+                    val maxId = getMaxCallId()
+                    if (maxId < currentLastId) {
+                        val newBaseline = if (maxId == -1L) 0L else maxId
+                        Log.w(TAG, "$DEBUG_PREFIX ID reset detected (DB max: $maxId, Last: $currentLastId). Resetting pointer to $newBaseline.")
+                        lastProcessedEntryId = newBaseline
+                        preferences.edit().putLong(KEY_LAST_PROCESSED_CALL_ID, newBaseline).commit()
+                        // Continue with the new baseline
+                    }
+
+                    Log.d(TAG, "$DEBUG_PREFIX checking for new calls since ID: $lastProcessedEntryId")
+                    
+                    var newCalls = queryNewCalls(uri, lastProcessedEntryId)
+                    
+                    // Progressive retry for slow database writes (up to ~15s total)
+                    var attempt = 1
+                    while (newCalls.isEmpty() && attempt <= 3) {
+                        val retryDelay = 2000L * attempt
+                        Log.d(TAG, "$DEBUG_PREFIX no new entries yet, retry #$attempt in ${retryDelay}ms...")
                         delay(retryDelay)
-                        newCalls = queryNewCalls(uri, currentLastId)
+                        newCalls = queryNewCalls(uri, lastProcessedEntryId)
+                        attempt++
                     }
 
                     if (newCalls.isEmpty()) {
-                        if (currentLastId == -1L) {
-                            Log.i(TAG, "$DEBUG_PREFIX no history found during first run, seeding baseline.")
-                            seedLastProcessedId(uri)
-                        } else {
-                            Log.d(TAG, "$DEBUG_PREFIX no new entries found after all retries.")
-                        }
+                        Log.d(TAG, "$DEBUG_PREFIX no new entries found after retries.")
                         return@withLock
                     }
 
-                    Log.i(TAG, "$DEBUG_PREFIX found ${newCalls.size} new calls to process")
+                    Log.i(TAG, "$DEBUG_PREFIX found ${newCalls.size} new calls")
 
                     for (call in newCalls) {
                         processSingleCall(call)
-
-                        // Update the tracker
                         lastProcessedEntryId = call.entryId
                         preferences.edit()
                             .putLong(KEY_LAST_PROCESSED_CALL_ID, lastProcessedEntryId)
-                            .commit() // Using commit for immediate persistence during processing
+                            .commit()
                     }
 
                 } catch (error: Exception) {
-                    Log.e(TAG, "$DEBUG_PREFIX failed to process call log change", error)
-                    container.logRepository.addLog(
-                        "$DEBUG_PREFIX error while processing call log change: ${error.message ?: error.javaClass.simpleName}"
-                    )
+                    Log.e(TAG, "$DEBUG_PREFIX processing error", error)
                 }
             }
         }
     }
 
     private suspend fun seedLastProcessedId(uri: Uri) {
-        val projection = arrayOf(CallLog.Calls._ID)
         val sortOrder = "${CallLog.Calls._ID} DESC LIMIT 1"
 
         try {
+            // Use null projection to avoid issues with missing columns on different devices
             appContext.contentResolver.query(
-                uri,
-                projection,
+                CallLog.Calls.CONTENT_URI,
+                null,
                 null,
                 null,
                 sortOrder
@@ -185,7 +188,6 @@ class CallLogObserver(
                         .commit()
                     Log.i(TAG, "$DEBUG_PREFIX seeded lastProcessedEntryId with $lastProcessedEntryId")
                 } else {
-                    // Log is empty, that's fine
                     lastProcessedEntryId = 0L
                     preferences.edit()
                         .putLong(KEY_LAST_PROCESSED_CALL_ID, 0L)
@@ -247,44 +249,24 @@ class CallLogObserver(
 
     private fun queryNewCalls(uri: Uri, sinceId: Long): List<CallLogEvent> {
         val results = mutableListOf<CallLogEvent>()
-        val projection = mutableListOf(
-            CallLog.Calls._ID,
-            CallLog.Calls.NUMBER,
-            CallLog.Calls.TYPE,
-            CallLog.Calls.DATE,
-            CallLog.Calls.DURATION,
-            CallLog.Calls.CACHED_NAME
+        if (sinceId == -1L) return emptyList()
+
+        val selection = "${CallLog.Calls._ID} > ? AND ${CallLog.Calls.TYPE} IN (?, ?, ?, ?)"
+        val selectionArgs = arrayOf(
+            sinceId.toString(),
+            CallLog.Calls.MISSED_TYPE.toString(),
+            CallLog.Calls.INCOMING_TYPE.toString(),
+            CallLog.Calls.OUTGOING_TYPE.toString(),
+            CallLog.Calls.REJECTED_TYPE.toString()
         )
-
-        // Add subscription ID for dual SIM/eSIM support if available
-        val subIdColumn = "subscription_id"
-        projection.add(subIdColumn)
-
-        val selection: String
-        val selectionArgs: Array<String>
-
-        if (sinceId == -1L) {
-            // First run: return empty to trigger seeding of baseline ID.
-            // This prevents capturing large amounts of historical calls on fresh install.
-            Log.d(TAG, "$DEBUG_PREFIX first run, skip history and trigger seed")
-            return emptyList()
-        } else {
-            selection = "${CallLog.Calls._ID} > ? AND ${CallLog.Calls.TYPE} IN (?, ?, ?, ?)"
-            selectionArgs = arrayOf(
-                sinceId.toString(),
-                CallLog.Calls.MISSED_TYPE.toString(),
-                CallLog.Calls.INCOMING_TYPE.toString(),
-                CallLog.Calls.OUTGOING_TYPE.toString(),
-                CallLog.Calls.REJECTED_TYPE.toString()
-            )
-        }
 
         val sortOrder = "${CallLog.Calls._ID} ASC"
 
         try {
+            // Always query the base URI to ensure we don't miss records if URI is row-specific
             appContext.contentResolver.query(
-                uri,
-                projection.toTypedArray(),
+                CallLog.Calls.CONTENT_URI,
+                null, // Use null to get all columns safely
                 selection,
                 selectionArgs,
                 sortOrder
@@ -328,9 +310,35 @@ class CallLogObserver(
         cachedName: String?,
         timestampMillis: Long
     ): String {
-        val identity = (cachedName ?: number).replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
-        val window = timestampMillis / 20000 
+        // Normalize the identity (remove non-digits from number, or use lowercase name)
+        val identity = if (!cachedName.isNullOrBlank()) {
+            cachedName.replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
+        } else {
+            number.replace(Regex("[^0-9]"), "")
+        }
+        
+        // 30-second window is enough to bridge the gap between Notification and CallLog
+        val window = timestampMillis / 30000
         return "call_event|$identity|$window"
+    }
+
+    private fun getMaxCallId(): Long {
+        try {
+            appContext.contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                arrayOf(CallLog.Calls._ID),
+                null,
+                null,
+                "${CallLog.Calls._ID} DESC LIMIT 1"
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    return cursor.getLong(0)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "$DEBUG_PREFIX failed to get max ID", e)
+        }
+        return -1L
     }
 
     private fun mapCallType(typeValue: Int): String {
