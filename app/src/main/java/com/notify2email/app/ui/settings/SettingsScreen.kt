@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,22 +42,27 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -207,6 +213,8 @@ private fun SmtpSection(
     var bccEmails by remember(settings) { mutableStateOf<List<String>>(settings.bccEmails) }
     var subjectPattern by remember(settings) { mutableStateOf(settings.subjectPattern) }
     var enabled by remember(settings) { mutableStateOf(settings.enabled) }
+    var healthReportEnabled by remember(settings) { mutableStateOf(settings.healthReportEnabled) }
+    var healthReportIntervalHours by remember(settings) { mutableStateOf(settings.healthReportIntervalHours) }
 
     // Auto-update encryption based on port
     androidx.compose.runtime.LaunchedEffect(port) {
@@ -288,7 +296,9 @@ private fun SmtpSection(
         enabled = enabled,
         smsEnabled = settings.smsEnabled,
         callsEnabled = settings.callsEnabled,
-        notificationsEnabled = settings.notificationsEnabled
+        notificationsEnabled = settings.notificationsEnabled,
+        healthReportEnabled = healthReportEnabled,
+        healthReportIntervalHours = healthReportIntervalHours
     )
 
     Column(
@@ -587,6 +597,78 @@ private fun SmtpSection(
             supportingContent = { Text("Allow outbound emails to be sent.") },
             trailingContent = { Switch(checked = enabled, onCheckedChange = { enabled = it }) }
         )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.1f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Health Report Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = { onShowInfo("Health Report", "The Health Report is a periodic status update sent to your email. It includes information about the device's battery level, screen status, and any pending event notifications. This helps you ensure the device is online and the app is monitoring correctly.") },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                ListItem(
+                    headlineContent = { Text("Periodic Health Report") },
+                    supportingContent = { Text("Send phone status at regular intervals.") },
+                    trailingContent = { 
+                        Switch(
+                            checked = healthReportEnabled, 
+                            onCheckedChange = { healthReportEnabled = it } 
+                        ) 
+                    },
+                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+
+                if (healthReportEnabled) {
+                    Text("Report Interval (Hours)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        IconButton(
+                            onClick = { if (healthReportIntervalHours > 1) healthReportIntervalHours-- },
+                            enabled = healthReportIntervalHours > 1
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                        }
+                        
+                        Text(
+                            text = healthReportIntervalHours.toString(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        
+                        IconButton(
+                            onClick = { if (healthReportIntervalHours < 24) healthReportIntervalHours++ },
+                            enabled = healthReportIntervalHours < 24
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase")
+                        }
+                    }
+                }
+            }
+        }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
@@ -968,7 +1050,9 @@ private fun SettingsScreenPreview() {
                 fromEmail = "from@example.com",
                 toEmailPrimary = "primary@example.com",
                 ccEmails = listOf("cc1@example.com"),
-                enabled = true
+                enabled = true,
+                healthReportEnabled = false,
+                healthReportIntervalHours = 1
             ),
             notificationFilterSettings = NotificationFilterSettings(
                 mode = NotificationFilterMode.BLACKLIST

@@ -44,6 +44,8 @@ class SharedPreferencesSettingsRepository(
             .putBoolean(SmtpConfigProvider.KEY_SMS_ENABLED, normalizedSettings.smsEnabled)
             .putBoolean(SmtpConfigProvider.KEY_CALL_LOGS_ENABLED, normalizedSettings.callsEnabled)
             .putString(KEY_APP_THEME, normalizedSettings.appTheme.name)
+            .putBoolean(KEY_HEALTH_REPORT_ENABLED, normalizedSettings.healthReportEnabled)
+            .putInt(KEY_HEALTH_REPORT_INTERVAL, normalizedSettings.healthReportIntervalHours)
             .apply()
 
         settingsFlow.value = readSettings()
@@ -92,7 +94,9 @@ class SharedPreferencesSettingsRepository(
                 AppTheme.valueOf(
                     preferences.getString(KEY_APP_THEME, AppTheme.LIGHT.name).orEmpty()
                 )
-            }.getOrDefault(AppTheme.LIGHT)
+            }.getOrDefault(AppTheme.LIGHT),
+            healthReportEnabled = preferences.getBoolean(KEY_HEALTH_REPORT_ENABLED, false),
+            healthReportIntervalHours = preferences.getInt(KEY_HEALTH_REPORT_INTERVAL, 1)
         )
     }
 
@@ -109,6 +113,8 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_PASSWORD = "smtp_password"
         private const val KEY_SUBJECT_PATTERN = "smtp_subject_pattern"
         private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_HEALTH_REPORT_ENABLED = "health_report_enabled"
+        private const val KEY_HEALTH_REPORT_INTERVAL = "health_report_interval"
         private const val DEFAULT_SMTP_PORT = 587
     }
 }

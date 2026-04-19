@@ -17,5 +17,7 @@ data class SmtpSettings(
     val smsEnabled: Boolean = true,
     val callsEnabled: Boolean = true,
     val notificationsEnabled: Boolean = true,
-    val appTheme: AppTheme = AppTheme.LIGHT
+    val appTheme: AppTheme = AppTheme.LIGHT,
+    val healthReportEnabled: Boolean = false,
+    val healthReportIntervalHours: Int = 1
 )

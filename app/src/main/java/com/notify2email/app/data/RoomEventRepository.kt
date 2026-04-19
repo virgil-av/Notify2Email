@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomEventRepository(
-    private val eventDao: EventDao
+    private val eventDao: EventDao,
+    private val queueDao: com.notify2email.app.storage.room.QueuedEventDao
 ) : EventRepository {
 
     override fun observeEvents(): Flow<List<Event>> {
@@ -40,5 +41,9 @@ class RoomEventRepository(
 
     override suspend fun deleteAllEvents() {
         eventDao.deleteAll()
+    }
+
+    override fun observeOldestQueueTime(): Flow<Long?> {
+        return queueDao.observeOldestEnqueuedAt()
     }
 }

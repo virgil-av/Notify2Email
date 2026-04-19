@@ -114,19 +114,15 @@ class SmsReceiver : BroadcastReceiver() {
             sender = firstMessage.displayOriginatingAddress.orEmpty(),
             messageBody = body,
             timestampMillis = firstMessage.timestampMillis,
-            dedupeKey = buildSmsDedupeKey(
-                sender = firstMessage.displayOriginatingAddress.orEmpty(),
-                timestampMillis = firstMessage.timestampMillis,
-                body = body
-            )
+            dedupeKey = buildSmsDedupeKey(body)
         )
     }
 
-    private fun buildSmsDedupeKey(sender: String, timestampMillis: Long, body: String): String {
+    private fun buildSmsDedupeKey(body: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
-            .digest(body.toByteArray(Charsets.UTF_8))
+            .digest(body.trim().toByteArray(Charsets.UTF_8))
             .joinToString(separator = "") { byte -> "%02x".format(byte) }
-        return "$sender|$timestampMillis|$digest"
+        return "sms_body_hash|$digest"
     }
 
     companion object {

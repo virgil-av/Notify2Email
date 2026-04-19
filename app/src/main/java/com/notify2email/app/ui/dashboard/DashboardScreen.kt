@@ -42,6 +42,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -97,6 +103,7 @@ fun DashboardScreen(
             StatusCard(
                 isRunning = uiState.isServiceRunning,
                 lastSyncMillis = uiState.lastSyncMillis,
+                oldestQueueTimeMillis = uiState.oldestQueueTimeMillis,
                 onToggleService = { onToggleService(false) }
             )
 
@@ -249,6 +256,7 @@ fun DashboardScreen(
 private fun StatusCard(
     isRunning: Boolean,
     lastSyncMillis: Long,
+    oldestQueueTimeMillis: Long?,
     onToggleService: () -> Unit
 ) {
     Card(
@@ -296,8 +304,8 @@ private fun StatusCard(
                     onClick = onToggleService,
                     colors = if (isRunning) {
                         ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            containerColor = Color(0xFFD32F2F), // Distinct Red for Stop
+                            contentColor = Color.White
                         )
                     } else {
                         ButtonDefaults.buttonColors()
@@ -307,12 +315,31 @@ private fun StatusCard(
                 }
             }
 
-            if (lastSyncMillis > 0L) {
-                Text(
-                    text = "Last activity: ${TimeUtils.formatDateTime(lastSyncMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            val oldestQueueTime = oldestQueueTimeMillis
+            if (oldestQueueTime != null) {
+                var secondsLeft by remember(oldestQueueTime) {
+                    val elapsed = System.currentTimeMillis() - oldestQueueTime
+                    val remaining = (60000L - elapsed).coerceAtLeast(0L) / 1000
+                    mutableLongStateOf(remaining)
+                }
+
+                LaunchedEffect(oldestQueueTime) {
+                    while (secondsLeft > 0) {
+                        delay(1000)
+                        val elapsed = System.currentTimeMillis() - oldestQueueTime
+                        secondsLeft = (60000L - elapsed).coerceAtLeast(0L) / 1000
+                    }
+                }
+
+                if (secondsLeft > 0) {
+                    Text(
+                        text = "Event mail will be sent in: $secondsLeft seconds",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
         }
     }
@@ -498,7 +525,7 @@ private fun EventToggleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Capture Events",
+                    text = "Capture & Status",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -522,11 +549,11 @@ private fun EventToggleCard(
                     if (showInfo) {
                         AlertDialog(
                             onDismissRequest = { showInfo = false },
-                            title = { Text("Event Types") },
+                            title = { Text("Information") },
                             text = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Select which activities should be forwarded to your email:")
-                                    Text("• SMS: Incoming text messages from your default SMS app.")
+                                    Text("Select which activities should be forwarded to your email:", fontWeight = FontWeight.Bold)
+                                    Text("• SMS: Incoming text messages.")
                                     Text("• Calls: Missed, rejected, or ignored calls.")
                                     Text("• Apps: Notifications from other selected applications.")
                                 }
@@ -543,7 +570,7 @@ private fun EventToggleCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CompactToggle(
@@ -639,7 +666,7 @@ private fun FooterSection() {
         }
         
         Text(
-            text = "Version 1.0",
+            text = "Version 1.1",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )

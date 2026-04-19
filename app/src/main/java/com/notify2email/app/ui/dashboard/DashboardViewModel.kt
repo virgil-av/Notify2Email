@@ -9,6 +9,8 @@ import com.notify2email.app.domain.repository.EventRepository
 import com.notify2email.app.domain.repository.PermissionRepository
 import com.notify2email.app.domain.repository.ServiceStateRepository
 import com.notify2email.app.domain.repository.SettingsRepository
+import android.content.Context
+import com.notify2email.app.work.WorkScheduler
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class DashboardViewModel(
+    private val context: Context,
     private val eventRepository: EventRepository,
     private val serviceStateRepository: ServiceStateRepository,
     private val settingsRepository: SettingsRepository,
@@ -43,9 +46,17 @@ class DashboardViewModel(
         serviceStateRepository.observeServiceState(),
         eventRepository.observeEvents(),
         settingsRepository.observeSettings(),
+        eventRepository.observeOldestQueueTime(),
         _showSmtpWarning,
         _showPermissionWarning
-    ) { serviceState, events, settings, showSmtp, showPermission ->
+    ) { flows ->
+        val serviceState = flows[0] as com.notify2email.app.domain.model.ServiceState
+        val events = flows[1] as List<Event>
+        val settings = flows[2] as com.notify2email.app.domain.model.SmtpSettings
+        val oldestQueueTime = flows[3] as Long?
+        val showSmtp = flows[4] as Boolean
+        val showPermission = flows[5] as Boolean
+
         UiState(
             isServiceRunning = serviceState.isRunning,
             lastSyncMillis = serviceState.lastUpdatedMillis,
@@ -58,9 +69,11 @@ class DashboardViewModel(
             smsEnabled = settings.smsEnabled,
             callsEnabled = settings.callsEnabled,
             notificationsEnabled = settings.notificationsEnabled,
+            healthReportEnabled = settings.healthReportEnabled,
             isSmtpConfigured = settings.host.isNotBlank() && settings.port > 0 && settings.toEmailPrimary.isNotBlank(),
             showSmtpWarning = showSmtp,
-            showPermissionWarning = showPermission
+            showPermissionWarning = showPermission,
+            oldestQueueTimeMillis = oldestQueueTime
         )
     }.stateIn(
         scope = viewModelScope,
@@ -147,6 +160,10 @@ class DashboardViewModel(
         updateEventToggle { copy(notificationsEnabled = enabled) }
     }
 
+    fun setHealthReportEnabled(enabled: Boolean) {
+        updateEventToggle { copy(healthReportEnabled = enabled) }
+    }
+
     private fun updateEventToggle(transform: com.notify2email.app.domain.model.SmtpSettings.() -> com.notify2email.app.domain.model.SmtpSettings) {
         viewModelScope.launch {
             val current = settingsRepository.getSettings()
@@ -164,9 +181,11 @@ class DashboardViewModel(
         val smsEnabled: Boolean = true,
         val callsEnabled: Boolean = true,
         val notificationsEnabled: Boolean = true,
+        val healthReportEnabled: Boolean = false,
         val isSmtpConfigured: Boolean = false,
         val showSmtpWarning: Boolean = true,
-        val showPermissionWarning: Boolean = true
+        val showPermissionWarning: Boolean = true,
+        val oldestQueueTimeMillis: Long? = null
     )
 
     enum class DismissalTarget {
