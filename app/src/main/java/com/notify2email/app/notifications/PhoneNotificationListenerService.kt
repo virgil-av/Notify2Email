@@ -81,24 +81,27 @@ class PhoneNotificationListenerService : NotificationListenerService() {
             return
         }
 
-        // 3. Check if Notifications forwarding is enabled
-        val isNotificationsEnabled = container.smtpConfigProvider.isFeatureEnabled(SmtpConfigProvider.KEY_NOTIFICATIONS_ENABLED)
-        if (!isNotificationsEnabled) {
-            Log.w(TAG, "$DEBUG_PREFIX ignoring notification because feature is DISABLED")
+        val event = sbn.toNotificationEvent()
+        notificationFilterManager.recordDetectedApp(event.packageName, event.appName)
+
+        // 3. Determine Smart Event Type and check corresponding feature flag
+        val smartEventType = NotificationClassifier.getSmartEventType(packageName, contentResolver)
+        val eventType = smartEventType ?: EventType.NOTIFICATION
+        
+        val featureKey = when (eventType) {
+            EventType.SMS -> SmtpConfigProvider.KEY_SMS_ENABLED
+            EventType.CALL -> SmtpConfigProvider.KEY_CALL_LOGS_ENABLED
+            else -> SmtpConfigProvider.KEY_NOTIFICATIONS_ENABLED
+        }
+
+        if (!container.smtpConfigProvider.isFeatureEnabled(featureKey)) {
+            Log.w(TAG, "$DEBUG_PREFIX ignoring notification because $featureKey is DISABLED")
             serviceScope.launch {
-                container.logRepository.addLog("$DEBUG_PREFIX ignored: Notifications feature is disabled in settings.")
+                container.logRepository.addLog("$DEBUG_PREFIX ignored: feature is disabled in settings.")
             }
             return
         }
 
-        val event = sbn.toNotificationEvent()
-        notificationFilterManager.recordDetectedApp(event.packageName, event.appName)
-
-        // 4. Smart Labeling & System Filtering
-        // If a notification comes from a known SMS/Dialer package, we process it but
-        // label it as SMS or CALL for a better user experience.
-        val smartEventType = getSmartEventType(packageName)
-        val eventType = smartEventType ?: EventType.NOTIFICATION
         val appName = if (smartEventType != null) {
             // For smart-labeled events, use the sender as the "app name" for display
             event.title ?: event.appName
@@ -164,9 +167,11 @@ class PhoneNotificationListenerService : NotificationListenerService() {
             return "app self-notification"
         }
 
-        // Filter out Call-related categories because we have a dedicated Call collector
-        if (event.category == Notification.CATEGORY_CALL || event.category == Notification.CATEGORY_MISSED_CALL) {
-            return "redundant call/missed-call category"
+        // We filter out SYSTEM dialer call notifications because CallLogObserver handles them.
+        // We do NOT filter WhatsApp/Signal/etc. because they don't appear in the Android CallLog.
+        if (NotificationClassifier.isSystemDialer(event.packageName, contentResolver) && 
+            (event.category == Notification.CATEGORY_CALL || event.category == Notification.CATEGORY_MISSED_CALL)) {
+            return "redundant system call category"
         }
 
         val title = event.title.orEmpty().trim()
@@ -238,35 +243,6 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         }.getOrDefault(targetPackage)
     }
 
-    private fun getSmartEventType(packageName: String): EventType? {
-        val dialer = android.provider.Settings.Secure.getString(contentResolver, "dialer_default_application")
-        val sms = android.provider.Telephony.Sms.getDefaultSmsPackage(this)
-
-        val knownDialers = setOf(
-            "com.google.android.dialer",
-            "com.android.phone",
-            "com.android.server.telecom",
-            "com.android.incallui",
-            "com.samsung.android.incallui",
-            "com.samsung.android.dialer",
-            dialer
-        ).filterNotNull()
-
-        val knownSms = setOf(
-            "com.google.android.apps.messaging",
-            "com.android.messaging",
-            "com.samsung.android.messaging",
-            "com.samsung.android.communications",
-            sms
-        ).filterNotNull()
-
-        return when (packageName) {
-            in knownSms -> EventType.SMS
-            in knownDialers -> EventType.CALL
-            else -> null
-        }
-    }
-
     companion object {
         private const val TAG = "PhoneNotificationSvc"
         private const val DEBUG_PREFIX = "[NOTIF]"
@@ -280,6 +256,48 @@ class PhoneNotificationListenerService : NotificationListenerService() {
                 ).orEmpty()
 
             return enabledListeners.contains(context.packageName)
+        }
+    }
+}
+
+/**
+ * Shared logic for classifying notifications into SMS, CALL, or generic NOTIFICATION.
+ */
+object NotificationClassifier {
+    fun isSystemDialer(packageName: String, contentResolver: android.content.ContentResolver): Boolean {
+        val dialer = android.provider.Settings.Secure.getString(contentResolver, "dialer_default_application")
+        val knownDialers = setOf(
+            "com.google.android.dialer",
+            "com.android.phone",
+            "com.android.server.telecom",
+            "com.android.incallui",
+            "com.samsung.android.incallui",
+            "com.samsung.android.dialer",
+            dialer
+        ).filterNotNull()
+        return packageName in knownDialers
+    }
+
+    fun getSmartEventType(packageName: String, contentResolver: android.content.ContentResolver?): EventType? {
+        val sms = if (contentResolver != null) {
+            android.provider.Telephony.Sms.getDefaultSmsPackage(null) // Context-free attempt
+        } else null
+
+        val knownSms = setOf(
+            "com.google.android.apps.messaging",
+            "com.android.messaging",
+            "com.samsung.android.messaging",
+            "com.samsung.android.communications",
+            sms
+        ).filterNotNull()
+
+        val voipApps = setOf("com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "org.thoughtcrime.securesms")
+
+        return when {
+            packageName in knownSms -> EventType.SMS
+            packageName in voipApps -> EventType.CALL
+            contentResolver != null && isSystemDialer(packageName, contentResolver) -> EventType.CALL
+            else -> null
         }
     }
 }
@@ -329,9 +347,11 @@ data class NotificationEvent(
 
     val windowedHash: String
         get() {
-            val window = postTimeMillis / NOTIFICATION_HASH_WINDOW_MILLIS
+            val window = (postTimeMillis.takeIf { it > 0 } ?: receivedAtMillis) / NOTIFICATION_HASH_WINDOW_MILLIS
             val raw = buildString {
                 append(packageName)
+                append('|')
+                append(title?.lowercase().orEmpty())
                 append('|')
                 append(normalizedBody.lowercase())
                 append('|')
@@ -352,33 +372,28 @@ data class NotificationEvent(
         }
 
     val batchDedupeKey: String
-        get() = if (getSmartEventType(packageName) == EventType.SMS) {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-                .digest(normalizedBody.trim().toByteArray(Charsets.UTF_8))
-                .joinToString(separator = "") { byte -> "%02x".format(byte) }
-            "sms_body_hash|$digest"
-        } else {
-            buildString {
-                append(packageName)
-                append('|')
-                append(title.orEmpty())
-                append('|')
-                append(normalizedBody)
+        get() {
+            // Context-less check for SMS deduplication hash
+            val isSms = packageName in setOf(
+                "com.google.android.apps.messaging", "com.android.messaging", 
+                "com.samsung.android.messaging", "com.samsung.android.communications"
+            )
+            
+            return if (isSms) {
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(normalizedBody.trim().toByteArray(Charsets.UTF_8))
+                    .joinToString(separator = "") { byte -> "%02x".format(byte) }
+                "sms_body_hash|$digest"
+            } else {
+                buildString {
+                    append(packageName)
+                    append('|')
+                    append(title.orEmpty())
+                    append('|')
+                    append(normalizedBody)
+                }
             }
         }
-
-    private fun getSmartEventType(packageName: String): EventType? {
-        val sms = android.provider.Telephony.Sms.getDefaultSmsPackage(null) // Context-free check or move logic
-        val knownSms = setOf(
-            "com.google.android.apps.messaging",
-            "com.android.messaging",
-            "com.samsung.android.messaging",
-            "com.samsung.android.communications",
-            sms
-        ).filterNotNull()
-
-        return if (packageName in knownSms) EventType.SMS else null
-    }
 }
 
 fun interface NotificationEventProcessor {
@@ -413,7 +428,11 @@ class EmailingNotificationEventProcessor(
         queueManager.enqueue(
             BatchQueueEvent(
                 sourceTag = source,
-                enabledKey = if (finalType == EventType.SMS) SmtpConfigProvider.KEY_SMS_ENABLED else SmtpConfigProvider.KEY_NOTIFICATIONS_ENABLED,
+                enabledKey = when (finalType) {
+                    EventType.SMS -> SmtpConfigProvider.KEY_SMS_ENABLED
+                    EventType.CALL -> SmtpConfigProvider.KEY_CALL_LOGS_ENABLED
+                    else -> SmtpConfigProvider.KEY_NOTIFICATIONS_ENABLED
+                },
                 eventType = finalType,
                 identity = event.notificationKey,
                 contentPreview = event.bestAvailableMessage.ifBlank { "No message available" },
