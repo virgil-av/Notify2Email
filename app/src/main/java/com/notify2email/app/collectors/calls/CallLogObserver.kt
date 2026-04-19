@@ -187,16 +187,17 @@ class CallLogObserver(
     private suspend fun processSingleCall(call: CallLogEvent) {
         Log.i(
             TAG,
-            "$DEBUG_PREFIX call detected for ${call.number.ifBlank { "unknown number" }} at ${call.timestampMillis}"
+            "$DEBUG_PREFIX call detected for ${call.number.ifBlank { "unknown number" }} at ${call.timestampMillis} (SIM: ${call.subscriptionId ?: "Unknown"})"
         )
         appContext.appContainer.logRepository.addLog(
-            "$DEBUG_PREFIX call captured for ${call.number.ifBlank { "unknown number" }}."
+            "$DEBUG_PREFIX call captured for ${call.number.ifBlank { "unknown number" }} ${if (call.subscriptionId != null) "on SIM ${call.subscriptionId}" else ""}."
         )
 
+        val simLabel = if (call.subscriptionId != null) " [SIM ${call.subscriptionId}]" else ""
         val contactInfo = if (!call.cachedName.isNullOrBlank()) {
-            "${call.cachedName} (${call.number})"
+            "${call.cachedName} (${call.number})$simLabel"
         } else {
-            call.number.ifBlank { "Unknown Number" }
+            "${call.number.ifBlank { "Unknown Number" }}$simLabel"
         }
 
         val durationText = if (call.durationSeconds > 0) {
@@ -232,7 +233,7 @@ class CallLogObserver(
 
     private fun queryNewCalls(uri: Uri, sinceId: Long): List<CallLogEvent> {
         val results = mutableListOf<CallLogEvent>()
-        val projection = arrayOf(
+        val projection = mutableListOf(
             CallLog.Calls._ID,
             CallLog.Calls.NUMBER,
             CallLog.Calls.TYPE,
@@ -240,6 +241,10 @@ class CallLogObserver(
             CallLog.Calls.DURATION,
             CallLog.Calls.CACHED_NAME
         )
+
+        // Add subscription ID for dual SIM/eSIM support if available
+        val subIdColumn = "subscription_id"
+        projection.add(subIdColumn)
 
         val selection: String
         val selectionArgs: Array<String>
@@ -273,7 +278,7 @@ class CallLogObserver(
         try {
             appContext.contentResolver.query(
                 uri,
-                projection,
+                projection.toTypedArray(),
                 selection,
                 selectionArgs,
                 sortOrder
@@ -297,6 +302,9 @@ class CallLogObserver(
         val cachedNameIndex = getColumnIndex(CallLog.Calls.CACHED_NAME)
         val cachedName = if (cachedNameIndex >= 0) getString(cachedNameIndex) else null
 
+        val subIdIndex = getColumnIndex("subscription_id")
+        val subscriptionId = if (subIdIndex >= 0 && !isNull(subIdIndex)) getInt(subIdIndex) else null
+
         return CallLogEvent(
             entryId = id,
             number = number,
@@ -304,7 +312,8 @@ class CallLogObserver(
             callType = mapCallType(typeValue),
             timestampMillis = date,
             durationSeconds = durationSeconds,
-            dedupeKey = buildCallDedupeKey(number, typeValue, date, durationSeconds)
+            subscriptionId = subscriptionId,
+            dedupeKey = buildCallDedupeKey(number, typeValue, date, durationSeconds, subscriptionId)
         )
     }
 
@@ -325,9 +334,10 @@ class CallLogObserver(
         number: String,
         callType: Int,
         timestampMillis: Long,
-        durationSeconds: Long
+        durationSeconds: Long,
+        subscriptionId: Int?
     ): String {
-        val raw = "$number|$callType|$timestampMillis|$durationSeconds"
+        val raw = "$number|$callType|$timestampMillis|$durationSeconds|$subscriptionId"
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(raw.toByteArray(Charsets.UTF_8))
             .joinToString(separator = "") { byte -> "%02x".format(byte) }
@@ -349,5 +359,6 @@ data class CallLogEvent(
     val callType: String,
     val timestampMillis: Long,
     val durationSeconds: Long,
+    val subscriptionId: Int?,
     val dedupeKey: String
 )
