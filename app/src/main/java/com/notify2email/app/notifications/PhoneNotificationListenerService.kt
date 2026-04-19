@@ -352,13 +352,33 @@ data class NotificationEvent(
         }
 
     val batchDedupeKey: String
-        get() = buildString {
-            append(packageName)
-            append('|')
-            append(title.orEmpty())
-            append('|')
-            append(normalizedBody)
+        get() = if (getSmartEventType(packageName) == EventType.SMS) {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(normalizedBody.trim().toByteArray(Charsets.UTF_8))
+                .joinToString(separator = "") { byte -> "%02x".format(byte) }
+            "sms_body_hash|$digest"
+        } else {
+            buildString {
+                append(packageName)
+                append('|')
+                append(title.orEmpty())
+                append('|')
+                append(normalizedBody)
+            }
         }
+
+    private fun getSmartEventType(packageName: String): EventType? {
+        val sms = android.provider.Telephony.Sms.getDefaultSmsPackage(null) // Context-free check or move logic
+        val knownSms = setOf(
+            "com.google.android.apps.messaging",
+            "com.android.messaging",
+            "com.samsung.android.messaging",
+            "com.samsung.android.communications",
+            sms
+        ).filterNotNull()
+
+        return if (packageName in knownSms) EventType.SMS else null
+    }
 }
 
 fun interface NotificationEventProcessor {
