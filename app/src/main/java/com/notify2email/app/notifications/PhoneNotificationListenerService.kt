@@ -45,6 +45,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        instance = this
         Log.i(TAG, "$DEBUG_PREFIX listener connected")
         serviceScope.launch {
             applicationContext.appContainer.logRepository.addLog("$DEBUG_PREFIX listener connected.")
@@ -53,6 +54,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        instance = null
         Log.w(TAG, "$DEBUG_PREFIX listener disconnected")
         serviceScope.launch {
             applicationContext.appContainer.logRepository.addLog("$DEBUG_PREFIX listener disconnected.")
@@ -158,6 +160,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         recentNotificationWindows.entries.removeIf { (_, capturedAt) ->
             System.currentTimeMillis() - capturedAt > NOTIFICATION_DEDUPE_WINDOW_MILLIS
         }
+        instance = null
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -247,6 +250,12 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         private const val TAG = "PhoneNotificationSvc"
         private const val DEBUG_PREFIX = "[NOTIF]"
         private val recentNotificationWindows = ConcurrentHashMap<String, Long>()
+
+        private var instance: PhoneNotificationListenerService? = null
+
+        fun getActiveNotifications(context: Context): Array<StatusBarNotification>? {
+            return instance?.activeNotifications
+        }
 
         fun isAccessGranted(context: Context): Boolean {
             val enabledListeners =

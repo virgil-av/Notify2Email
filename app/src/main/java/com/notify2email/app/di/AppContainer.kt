@@ -21,7 +21,7 @@ import com.notify2email.app.storage.room.AppDatabase
 class AppContainer(
     context: Context
 ) {
-    private val appContext = context.applicationContext
+    val appContext = context.applicationContext
     private val database by lazy { AppDatabase.getInstance(appContext) }
 
     val emailSender by lazy { SmtpEmailSender() }

@@ -9,6 +9,8 @@ import com.notify2email.app.domain.repository.EventRepository
 import com.notify2email.app.domain.repository.PermissionRepository
 import com.notify2email.app.domain.repository.ServiceStateRepository
 import com.notify2email.app.domain.repository.SettingsRepository
+import android.content.Context
+import com.notify2email.app.work.WorkScheduler
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class DashboardViewModel(
+    private val context: Context,
     private val eventRepository: EventRepository,
     private val serviceStateRepository: ServiceStateRepository,
     private val settingsRepository: SettingsRepository,
@@ -58,6 +61,7 @@ class DashboardViewModel(
             smsEnabled = settings.smsEnabled,
             callsEnabled = settings.callsEnabled,
             notificationsEnabled = settings.notificationsEnabled,
+            healthReportEnabled = settings.healthReportEnabled,
             isSmtpConfigured = settings.host.isNotBlank() && settings.port > 0 && settings.toEmailPrimary.isNotBlank(),
             showSmtpWarning = showSmtp,
             showPermissionWarning = showPermission
@@ -147,6 +151,18 @@ class DashboardViewModel(
         updateEventToggle { copy(notificationsEnabled = enabled) }
     }
 
+    fun setHealthReportEnabled(enabled: Boolean) {
+        updateEventToggle { copy(healthReportEnabled = enabled) }
+        viewModelScope.launch {
+            val settings = settingsRepository.getSettings()
+            WorkScheduler.scheduleHealthReport(
+                context = context,
+                intervalHours = settings.healthReportIntervalHours,
+                enabled = enabled
+            )
+        }
+    }
+
     private fun updateEventToggle(transform: com.notify2email.app.domain.model.SmtpSettings.() -> com.notify2email.app.domain.model.SmtpSettings) {
         viewModelScope.launch {
             val current = settingsRepository.getSettings()
@@ -164,6 +180,7 @@ class DashboardViewModel(
         val smsEnabled: Boolean = true,
         val callsEnabled: Boolean = true,
         val notificationsEnabled: Boolean = true,
+        val healthReportEnabled: Boolean = false,
         val isSmtpConfigured: Boolean = false,
         val showSmtpWarning: Boolean = true,
         val showPermissionWarning: Boolean = true

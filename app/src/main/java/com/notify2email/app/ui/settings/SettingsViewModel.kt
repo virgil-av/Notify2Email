@@ -2,6 +2,8 @@ package com.notify2email.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
+import com.notify2email.app.work.WorkScheduler
 import com.notify2email.app.domain.model.AppTheme
 import com.notify2email.app.domain.model.DeliveryResult
 import com.notify2email.app.domain.model.NotificationFilterMode
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
+    private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val serviceStateRepository: ServiceStateRepository,
     private val notificationFilterManager: NotificationFilterManager
@@ -60,6 +63,14 @@ class SettingsViewModel(
             }
             _uiState.update { it.copy(isSaving = true) }
             settingsRepository.saveSettings(normalizedSettings)
+            
+            // Re-schedule health report in case interval or enabled status changed
+            WorkScheduler.scheduleHealthReport(
+                context = context,
+                intervalHours = normalizedSettings.healthReportIntervalHours,
+                enabled = normalizedSettings.healthReportEnabled
+            )
+
             if (!normalizedSettings.enabled) {
                 serviceStateRepository.stopService()
             }
@@ -138,7 +149,9 @@ class SettingsViewModel(
             ccEmails = emptyList(),
             bccEmails = emptyList(),
             enabled = false,
-            appTheme = AppTheme.LIGHT
+            appTheme = AppTheme.LIGHT,
+            healthReportEnabled = false,
+            healthReportIntervalHours = 1
         ),
         val notificationFilterSettings: NotificationFilterSettings = NotificationFilterSettings(),
         val isSaving: Boolean = false,

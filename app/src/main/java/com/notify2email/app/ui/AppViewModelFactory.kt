@@ -18,6 +18,7 @@ class AppViewModelFactory(
         return when {
             modelClass.isAssignableFrom(DashboardViewModel::class.java) -> {
                 DashboardViewModel(
+                    context = appContainer.appContext,
                     eventRepository = appContainer.eventRepository,
                     serviceStateRepository = appContainer.serviceStateRepository,
                     settingsRepository = appContainer.settingsRepository,
@@ -33,6 +34,7 @@ class AppViewModelFactory(
 
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
                 SettingsViewModel(
+                    context = appContainer.appContext,
                     settingsRepository = appContainer.settingsRepository,
                     serviceStateRepository = appContainer.serviceStateRepository,
                     notificationFilterManager = appContainer.notificationFilterManager

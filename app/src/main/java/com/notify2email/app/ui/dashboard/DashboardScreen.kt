@@ -71,6 +71,7 @@ fun DashboardScreen(
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
     onNotificationsToggleChanged: (Boolean) -> Unit,
+    onHealthReportToggleChanged: (Boolean) -> Unit,
     onDismissValidationDialog: () -> Unit,
     onNavigateToSettings: (initialTab: Int?) -> Unit,
     onRequestDismissal: (DashboardViewModel.DismissalTarget) -> Unit,
@@ -146,9 +147,11 @@ fun DashboardScreen(
                 smsEnabled = uiState.smsEnabled,
                 callsEnabled = uiState.callsEnabled,
                 notificationsEnabled = uiState.notificationsEnabled,
+                healthReportEnabled = uiState.healthReportEnabled,
                 onSmsToggleChanged = onSmsToggleChanged,
                 onCallsToggleChanged = onCallsToggleChanged,
-                onNotificationsToggleChanged = onNotificationsToggleChanged
+                onNotificationsToggleChanged = onNotificationsToggleChanged,
+                onHealthReportToggleChanged = onHealthReportToggleChanged
             )
 
             FooterSection()
@@ -477,9 +480,11 @@ private fun EventToggleCard(
     smsEnabled: Boolean,
     callsEnabled: Boolean,
     notificationsEnabled: Boolean,
+    healthReportEnabled: Boolean,
     onSmsToggleChanged: (Boolean) -> Unit,
     onCallsToggleChanged: (Boolean) -> Unit,
-    onNotificationsToggleChanged: (Boolean) -> Unit
+    onNotificationsToggleChanged: (Boolean) -> Unit,
+    onHealthReportToggleChanged: (Boolean) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -498,7 +503,7 @@ private fun EventToggleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Capture Events",
+                    text = "Capture & Status",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -522,13 +527,16 @@ private fun EventToggleCard(
                     if (showInfo) {
                         AlertDialog(
                             onDismissRequest = { showInfo = false },
-                            title = { Text("Event Types") },
+                            title = { Text("Information") },
                             text = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Select which activities should be forwarded to your email:")
-                                    Text("• SMS: Incoming text messages from your default SMS app.")
+                                    Text("Select which activities should be forwarded to your email:", fontWeight = FontWeight.Bold)
+                                    Text("• SMS: Incoming text messages.")
                                     Text("• Calls: Missed, rejected, or ignored calls.")
                                     Text("• Apps: Notifications from other selected applications.")
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("System Status Reports:", fontWeight = FontWeight.Bold)
+                                    Text("• Health: Periodic report (every 1-3 hours) containing battery level, screen state, and pending notifications.")
                                 }
                             },
                             confirmButton = {
@@ -565,6 +573,13 @@ private fun EventToggleCard(
                     label = "Apps",
                     checked = notificationsEnabled,
                     onCheckedChange = onNotificationsToggleChanged,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactToggle(
+                    icon = Icons.Outlined.Info,
+                    label = "Health",
+                    checked = healthReportEnabled,
+                    onCheckedChange = onHealthReportToggleChanged,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -670,6 +685,7 @@ private fun DashboardScreenPreview() {
             onSmsToggleChanged = {},
             onCallsToggleChanged = {},
             onNotificationsToggleChanged = {},
+            onHealthReportToggleChanged = {},
             validationDialogMissingItems = null,
             dismissalConfirmation = null,
             onDismissValidationDialog = {},
