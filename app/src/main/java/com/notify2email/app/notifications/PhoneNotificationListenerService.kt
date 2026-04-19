@@ -170,11 +170,12 @@ class PhoneNotificationListenerService : NotificationListenerService() {
             return "app self-notification"
         }
 
-        // We filter out SYSTEM dialer call notifications because CallLogObserver handles them.
-        // We do NOT filter WhatsApp/Signal/etc. because they don't appear in the Android CallLog.
+        // We used to filter out SYSTEM dialer call notifications because CallLogObserver handles them.
+        // However, to ensure reliability (fallback), we now allow them to pass through.
+        // The EventBatchQueueManager will handle deduplication if both capture the same event.
         if (NotificationClassifier.isSystemDialer(event.packageName, contentResolver) && 
-            (event.category == Notification.CATEGORY_CALL || event.category == Notification.CATEGORY_MISSED_CALL)) {
-            return "redundant system call category"
+            event.category == Notification.CATEGORY_CALL) {
+            return "redundant active system call"
         }
 
         val title = event.title.orEmpty().trim()
@@ -387,20 +388,27 @@ data class NotificationEvent(
                 "com.google.android.apps.messaging", "com.android.messaging", 
                 "com.samsung.android.messaging", "com.samsung.android.communications"
             )
-            
-            return if (isSms) {
+
+            if (isSms) {
                 val digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(normalizedBody.trim().toByteArray(Charsets.UTF_8))
                     .joinToString(separator = "") { byte -> "%02x".format(byte) }
-                "sms_body_hash|$digest"
-            } else {
-                buildString {
-                    append(packageName)
-                    append('|')
-                    append(title.orEmpty())
-                    append('|')
-                    append(normalizedBody)
-                }
+                return "sms_body_hash|$digest"
+            }
+
+            // Special handling for Calls (SIM or VOIP) to align with CallLogObserver
+            if (category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_MISSED_CALL) {
+                val identity = (title ?: appName).replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
+                val window = (postTimeMillis.takeIf { it > 0 } ?: receivedAtMillis) / 20000
+                return "call_event|$identity|$window"
+            }
+            
+            return buildString {
+                append(packageName)
+                append('|')
+                append(title.orEmpty())
+                append('|')
+                append(normalizedBody)
             }
         }
 }
