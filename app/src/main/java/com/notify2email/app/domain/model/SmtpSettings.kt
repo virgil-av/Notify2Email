@@ -22,5 +22,9 @@ data class SmtpSettings(
     val healthReportIntervalHours: Int = 1,
     val healthReportStartTime: String = "09:00",
     val callDetectionFailsafeEnabled: Boolean = false,
-    val batchDelaySeconds: Int = 30
+    val batchDelayEnabled: Boolean = false,
+    val batchDelaySeconds: Int = 30,
+    val resolveContactNames: Boolean = false,
+    val showSimInfo: Boolean = false,
+    val callScreeningEnabled: Boolean = false
 )

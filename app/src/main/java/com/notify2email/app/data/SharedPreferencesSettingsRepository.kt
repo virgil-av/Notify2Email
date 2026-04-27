@@ -48,7 +48,11 @@ class SharedPreferencesSettingsRepository(
             .putInt(KEY_HEALTH_REPORT_INTERVAL, normalizedSettings.healthReportIntervalHours)
             .putString(KEY_HEALTH_REPORT_START_TIME, normalizedSettings.healthReportStartTime)
             .putBoolean(KEY_CALL_FAILSAFE_ENABLED, normalizedSettings.callDetectionFailsafeEnabled)
+            .putBoolean(KEY_BATCH_DELAY_ENABLED, normalizedSettings.batchDelayEnabled)
             .putInt(KEY_BATCH_DELAY, normalizedSettings.batchDelaySeconds)
+            .putBoolean(KEY_RESOLVE_CONTACTS, normalizedSettings.resolveContactNames)
+            .putBoolean(KEY_SHOW_SIM_INFO, normalizedSettings.showSimInfo)
+            .putBoolean(KEY_CALL_SCREENING_ENABLED, normalizedSettings.callScreeningEnabled)
             .apply()
 
         settingsFlow.value = readSettings()
@@ -102,7 +106,11 @@ class SharedPreferencesSettingsRepository(
             healthReportIntervalHours = preferences.getInt(KEY_HEALTH_REPORT_INTERVAL, 1),
             healthReportStartTime = preferences.getString(KEY_HEALTH_REPORT_START_TIME, "09:00") ?: "09:00",
             callDetectionFailsafeEnabled = preferences.getBoolean(KEY_CALL_FAILSAFE_ENABLED, false),
-            batchDelaySeconds = preferences.getInt(KEY_BATCH_DELAY, 30)
+            batchDelayEnabled = preferences.getBoolean(KEY_BATCH_DELAY_ENABLED, false),
+            batchDelaySeconds = preferences.getInt(KEY_BATCH_DELAY, 30),
+            resolveContactNames = preferences.getBoolean(KEY_RESOLVE_CONTACTS, false),
+            showSimInfo = preferences.getBoolean(KEY_SHOW_SIM_INFO, false),
+            callScreeningEnabled = preferences.getBoolean(KEY_CALL_SCREENING_ENABLED, false)
         )
     }
 
@@ -123,7 +131,11 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_HEALTH_REPORT_INTERVAL = "health_report_interval"
         private const val KEY_HEALTH_REPORT_START_TIME = "health_report_start_time"
         private const val KEY_CALL_FAILSAFE_ENABLED = "call_failsafe_enabled"
+        private const val KEY_BATCH_DELAY_ENABLED = "batch_delay_enabled"
         private const val KEY_BATCH_DELAY = "batch_delay_seconds"
+        private const val KEY_RESOLVE_CONTACTS = "resolve_contact_names"
+        private const val KEY_SHOW_SIM_INFO = "show_sim_info"
+        private const val KEY_CALL_SCREENING_ENABLED = "call_screening_enabled"
         private const val DEFAULT_SMTP_PORT = 587
     }
 }

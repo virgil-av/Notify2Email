@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <application
         android:name=".PhoneEventsApp"
@@ -57,6 +58,25 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name="com.notify2email.app.services.RelayCallScreeningService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name="com.notify2email.app.receivers.PhoneStateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name="com.notify2email.app.collectors.sms.SmsReceiver"

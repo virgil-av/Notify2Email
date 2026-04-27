@@ -201,20 +201,35 @@ class CallLogObserver(
     }
 
     private suspend fun processSingleCall(call: CallLogEvent) {
+        val container = appContext.appContainer
+        val settings = container.settingsRepository.getSettings()
+
         Log.i(
             TAG,
             "$DEBUG_PREFIX call detected for ${call.number.ifBlank { "unknown number" }} at ${call.timestampMillis} (SIM: ${call.subscriptionId ?: "Unknown"})"
         )
-        appContext.appContainer.logRepository.addLog(
-            "$DEBUG_PREFIX call captured for ${call.number.ifBlank { "unknown number" }} ${if (call.subscriptionId != null) "on SIM ${call.subscriptionId}" else ""}."
-        )
+        
+        val resolvedName = if (settings.resolveContactNames && call.cachedName.isNullOrBlank()) {
+            container.contactNameResolver.resolve(call.number)
+        } else call.cachedName
 
-        val simLabel = if (call.subscriptionId != null) " [SIM ${call.subscriptionId}]" else ""
-        val contactInfo = if (!call.cachedName.isNullOrBlank()) {
-            "${call.cachedName} (${call.number})$simLabel"
+        val simInfo = if (settings.showSimInfo && call.subscriptionId != null) {
+            container.simSlotResolver.resolveBestEffort(subscriptionId = call.subscriptionId)
+        } else null
+
+        val simLabel = if (settings.showSimInfo) {
+            simInfo?.displayName?.let { " [$it]" } ?: (if (call.subscriptionId != null) " [SIM ${call.subscriptionId}]" else "")
+        } else ""
+
+        val contactInfo = if (!resolvedName.isNullOrBlank()) {
+            "$resolvedName (${call.number})$simLabel"
         } else {
             "${call.number.ifBlank { "Unknown Number" }}$simLabel"
         }
+
+        container.logRepository.addLog(
+            "$DEBUG_PREFIX call captured for ${call.number.ifBlank { "unknown number" }}$simLabel."
+        )
 
         val durationText = if (call.durationSeconds > 0) {
             val mins = call.durationSeconds / 60

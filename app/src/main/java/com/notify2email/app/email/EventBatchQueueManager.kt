@@ -81,7 +81,11 @@ class EventBatchQueueManager(
 
         stateMutex.withLock {
             if (!isFlushing) {
-                if (event.eventType == EventType.CALL || event.eventType == EventType.SMS) {
+                val immediate = event.eventType == EventType.CALL || 
+                               event.eventType == EventType.SMS || 
+                               !configProvider.isBatchDelayEnabled()
+
+                if (immediate) {
                     flushJob?.cancel()
                     flushJob = scope.launch { flushBatch() }
                 } else if (flushJob?.isActive != true) {
@@ -110,6 +114,12 @@ class EventBatchQueueManager(
 
     private suspend fun scheduleNextFlushLocked() {
         val oldestEnqueuedAt = queueDao.getOldestEnqueuedAt() ?: return
+        
+        if (!configProvider.isBatchDelayEnabled()) {
+            flushJob = scope.launch { flushBatch() }
+            return
+        }
+
         val batchDelayMs = configProvider.getBatchDelaySeconds() * 1000L
         val delayMillis = (oldestEnqueuedAt + batchDelayMs - System.currentTimeMillis()).coerceAtLeast(0L)
 

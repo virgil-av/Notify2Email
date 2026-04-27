@@ -5,5 +5,7 @@ data class PermissionState(
     val callLogGranted: Boolean,
     val notificationAccessGranted: Boolean,
     val postNotificationsGranted: Boolean = true,
-    val batteryOptimizationIgnored: Boolean = false
+    val batteryOptimizationIgnored: Boolean = false,
+    val contactsGranted: Boolean = false,
+    val callScreeningRoleGranted: Boolean = false
 )

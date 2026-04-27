@@ -76,22 +76,36 @@ class SmsReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
+                val settings = container.settingsRepository.getSettings()
                 val smsEvent = messages.toSmsEvent()
-                Log.i(TAG, "$DEBUG_PREFIX captured SMS from ${smsEvent.sender}")
-                container.logRepository.addLog("$DEBUG_PREFIX captured SMS from ${smsEvent.sender}.")
+                
+                val resolvedName = if (settings.resolveContactNames) {
+                    container.contactNameResolver.resolve(smsEvent.sender)
+                } else null
+
+                val simInfo = if (settings.showSimInfo) {
+                    container.simSlotResolver.resolveBestEffort(intent = intent)
+                } else null
+
+                val displayName = resolvedName ?: smsEvent.sender
+                val simSuffix = simInfo?.displayName?.let { " ($it)" } ?: ""
+                val sourceTag = if (resolvedName != null) "$resolvedName (${smsEvent.sender})" else smsEvent.sender
+
+                Log.i(TAG, "$DEBUG_PREFIX captured SMS from $displayName$simSuffix")
+                container.logRepository.addLog("$DEBUG_PREFIX captured SMS from $displayName$simSuffix.")
 
                 container.eventBatchQueueManager.enqueue(
                     BatchQueueEvent(
-                        sourceTag = smsEvent.sender,
+                        sourceTag = sourceTag,
                         enabledKey = SmtpConfigProvider.KEY_SMS_ENABLED,
                         eventType = EventType.SMS,
                         identity = smsEvent.sender,
                         contentPreview = smsEvent.messageBody.trim(),
                         detailBody = EventFormatter.formatEventHtml(
                             type = EventType.SMS,
-                            source = smsEvent.sender,
+                            source = sourceTag,
                             timestampMillis = smsEvent.timestampMillis,
-                            content = smsEvent.messageBody
+                            content = smsEvent.messageBody + (if (simSuffix.isNotEmpty()) "\n\nReceived on $simSuffix" else "")
                         ),
                         timestampMillis = smsEvent.timestampMillis,
                         dedupeKey = smsEvent.dedupeKey

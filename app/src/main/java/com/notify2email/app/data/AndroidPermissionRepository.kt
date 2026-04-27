@@ -1,6 +1,7 @@
 package com.notify2email.app.data
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -26,8 +27,19 @@ class AndroidPermissionRepository(
             } else {
                 true
             },
-            batteryOptimizationIgnored = BatteryOptimizationManager.isIgnoringBatteryOptimizations(appContext)
+            batteryOptimizationIgnored = BatteryOptimizationManager.isIgnoringBatteryOptimizations(appContext),
+            contactsGranted = hasPermission(Manifest.permission.READ_CONTACTS),
+            callScreeningRoleGranted = hasCallScreeningRole()
         )
+    }
+
+    private fun hasCallScreeningRole(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = appContext.getSystemService(Context.ROLE_SERVICE) as RoleManager
+            roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
+        } else {
+            true // Not required below Q
+        }
     }
 
     private fun hasPermission(permission: String): Boolean {

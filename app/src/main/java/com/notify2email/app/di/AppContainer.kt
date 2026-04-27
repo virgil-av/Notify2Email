@@ -17,6 +17,8 @@ import com.notify2email.app.email.SharedPreferencesSmtpConfigProvider
 import com.notify2email.app.email.SmtpEmailSender
 import com.notify2email.app.notifications.NotificationFilterManager
 import com.notify2email.app.storage.room.AppDatabase
+import com.notify2email.app.util.ContactNameResolver
+import com.notify2email.app.util.SimSlotResolver
 
 class AppContainer(
     context: Context
@@ -57,6 +59,9 @@ class AppContainer(
     val permissionRepository: PermissionRepository by lazy {
         AndroidPermissionRepository(appContext)
     }
+
+    val contactNameResolver by lazy { ContactNameResolver(appContext) }
+    val simSlotResolver by lazy { SimSlotResolver(appContext) }
 }
 
 val Context.appContainer: AppContainer

@@ -10,9 +10,11 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,7 +78,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -98,6 +102,8 @@ import com.notify2email.app.email.TlsMode
 import com.notify2email.app.permissions.PermissionNavigator
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LightMode
 import com.notify2email.app.ui.components.InfoDialog
 import com.notify2email.app.util.EmailValidator
@@ -219,7 +225,11 @@ private fun SmtpSection(
     var healthReportIntervalHours by remember(settings) { mutableStateOf(settings.healthReportIntervalHours) }
     var healthReportStartTime by remember(settings) { mutableStateOf(settings.healthReportStartTime) }
     var callDetectionFailsafeEnabled by remember(settings) { mutableStateOf(settings.callDetectionFailsafeEnabled) }
+    var batchDelayEnabled by remember(settings) { mutableStateOf(settings.batchDelayEnabled) }
     var batchDelaySeconds by remember(settings) { mutableStateOf(settings.batchDelaySeconds) }
+    var resolveContactNames by remember(settings) { mutableStateOf(settings.resolveContactNames) }
+    var showSimInfo by remember(settings) { mutableStateOf(settings.showSimInfo) }
+    var callScreeningEnabled by remember(settings) { mutableStateOf(settings.callScreeningEnabled) }
 
     // Auto-update encryption based on port
     androidx.compose.runtime.LaunchedEffect(port) {
@@ -306,7 +316,11 @@ private fun SmtpSection(
         healthReportIntervalHours = healthReportIntervalHours,
         healthReportStartTime = healthReportStartTime,
         callDetectionFailsafeEnabled = callDetectionFailsafeEnabled,
-        batchDelaySeconds = batchDelaySeconds
+        batchDelayEnabled = batchDelayEnabled,
+        batchDelaySeconds = batchDelaySeconds,
+        resolveContactNames = resolveContactNames,
+        showSimInfo = showSimInfo,
+        callScreeningEnabled = callScreeningEnabled
     )
 
     Column(
@@ -606,147 +620,100 @@ private fun SmtpSection(
             trailingContent = { Switch(checked = enabled, onCheckedChange = { enabled = it }) }
         )
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
+        CollapsableGroup(
+            title = "Advanced Detection",
+            icon = Icons.Default.Settings,
+            color = MaterialTheme.colorScheme.primary,
+            onShowInfo = { onShowInfo("Advanced Detection", "Enable enhanced features for better event details and reliability. Some features require additional permissions like Contacts Access.") }
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Call Detection Failsafe", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    IconButton(
-                        onClick = { onShowInfo("Call Detection Failsafe", "On some multi-SIM devices, the system may fail to record calls in the official Call Log. When enabled, this failsafe monitors dialer notifications as a backup to ensure missed calls are still captured and emailed.") },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
-                ListItem(
-                    headlineContent = { Text("Use Backup Monitoring") },
-                    supportingContent = { Text("Detect calls via notifications if log entry is missing.") },
-                    trailingContent = { 
-                        Switch(
-                            checked = callDetectionFailsafeEnabled, 
-                            onCheckedChange = { callDetectionFailsafeEnabled = it } 
-                        ) 
-                    },
-                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
-                )
-            }
+            ListItem(
+                headlineContent = { Text("Resolve Contact Names") },
+                supportingContent = { Text("Show name instead of number for known contacts.") },
+                trailingContent = { Switch(checked = resolveContactNames, onCheckedChange = { resolveContactNames = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            ListItem(
+                headlineContent = { Text("Show SIM Info") },
+                supportingContent = { Text("Identify which SIM card received the event.") },
+                trailingContent = { Switch(checked = showSimInfo, onCheckedChange = { showSimInfo = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            ListItem(
+                headlineContent = { Text("Enable Call Screening") },
+                supportingContent = { Text("Capture blocked or screened calls.") },
+                trailingContent = { Switch(checked = callScreeningEnabled, onCheckedChange = { callScreeningEnabled = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
         }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f))
+        CollapsableGroup(
+            title = "Delivery Optimization",
+            icon = Icons.Default.FilterList,
+            color = MaterialTheme.colorScheme.secondary,
+            onShowInfo = { onShowInfo("Delivery Optimization", "Configure how and when notifications are batched and reported.") }
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Batching Delay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    IconButton(
-                        onClick = { onShowInfo("Batching Delay", "Determines how long the app waits to group multiple notifications into a single email. Critical events like SMS and Calls are always sent immediately.") },
-                        modifier = Modifier.size(24.dp)
+            ListItem(
+                headlineContent = { Text("Call Detection Failsafe") },
+                supportingContent = { Text("Detect calls via notifications if log entry is missing.") },
+                trailingContent = { Switch(checked = callDetectionFailsafeEnabled, onCheckedChange = { callDetectionFailsafeEnabled = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            ListItem(
+                headlineContent = { Text("Batching Delay") },
+                supportingContent = { Text("Group notifications to reduce email volume.") },
+                trailingContent = { Switch(checked = batchDelayEnabled, onCheckedChange = { batchDelayEnabled = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            if (batchDelayEnabled) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Delay Timer (Seconds)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        IconButton(
+                            onClick = { if (batchDelaySeconds > 0) batchDelaySeconds -= 5 },
+                            enabled = batchDelaySeconds > 0
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                        }
+
+                        Text(
+                            text = batchDelaySeconds.toString(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp)
                         )
-                    }
-                }
 
-                Text("Delay Timer (Seconds)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    IconButton(
-                        onClick = { if (batchDelaySeconds > 0) batchDelaySeconds -= 5 },
-                        enabled = batchDelaySeconds > 0
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrease")
-                    }
-
-                    Text(
-                        text = batchDelaySeconds.toString(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    )
-
-                    IconButton(
-                        onClick = { if (batchDelaySeconds < 60) batchDelaySeconds += 5 },
-                        enabled = batchDelaySeconds < 60
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increase")
+                        IconButton(
+                            onClick = { if (batchDelaySeconds < 60) batchDelaySeconds += 5 },
+                            enabled = batchDelaySeconds < 60
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase")
+                        }
                     }
                 }
             }
-        }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.1f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Health Report Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    IconButton(
-                        onClick = { onShowInfo("Health Report", "The Health Report is a periodic status update sent to your email. It includes information about the device's battery level, screen status, and any pending event notifications. This helps you ensure the device is online and the app is monitoring correctly.") },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
-                ListItem(
-                    headlineContent = { Text("Periodic Health Report") },
-                    supportingContent = { Text("Send phone status at regular intervals.") },
-                    trailingContent = { 
-                        Switch(
-                            checked = healthReportEnabled, 
-                            onCheckedChange = { healthReportEnabled = it } 
-                        ) 
-                    },
-                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
-                )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                if (healthReportEnabled) {
+            ListItem(
+                headlineContent = { Text("Periodic Health Report") },
+                supportingContent = { Text("Send phone status at regular intervals.") },
+                trailingContent = { Switch(checked = healthReportEnabled, onCheckedChange = { healthReportEnabled = it }) },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            if (healthReportEnabled) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Report Interval (Hours)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
-                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -854,6 +821,7 @@ private fun AccessSection(
     val smsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
     val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
+    val contactsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
 
     Column(
         modifier = Modifier
@@ -894,6 +862,22 @@ private fun AccessSection(
             onClick = { callLauncher.launch(Manifest.permission.READ_CALL_LOG) },
             onInfoClick = { onShowInfo("Call Logs", "Allows the app to detect missed and incoming calls to send summary alerts to your email.") }
         )
+
+        AccessCard(
+            title = "Contacts Access",
+            isGranted = permissionState.contactsGranted,
+            onClick = { contactsLauncher.launch(Manifest.permission.READ_CONTACTS) },
+            onInfoClick = { onShowInfo("Contacts", "Used to show contact names instead of raw phone numbers in your emails.") }
+        )
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            AccessCard(
+                title = "Call Screening",
+                isGranted = permissionState.callScreeningRoleGranted,
+                onClick = { PermissionNavigator.requestCallScreeningRole(context) },
+                onInfoClick = { onShowInfo("Call Screening", "Allows the app to capture and relay calls that might be blocked or screened by the system.") }
+            )
+        }
 
         AccessCard(
             title = "Notification Listener",
@@ -1162,6 +1146,76 @@ private fun EncryptionField(
     }
 }
 
+@Composable
+private fun CollapsableGroup(
+    title: String,
+    icon: ImageVector,
+    color: Color,
+    onShowInfo: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.05f)
+        )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(icon, contentDescription = null, tint = color)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (expanded) "Tap to collapse" else "Tap to expand",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onShowInfo, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand"
+                    )
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = color.copy(alpha = 0.2f))
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content
+                )
+            }
+        }
+    }
+}
+
 private fun Drawable.toBitmapSafely(): Bitmap {
     if (this is BitmapDrawable && bitmap != null) return bitmap
     val w = intrinsicWidth.takeIf { it > 0 } ?: 96
@@ -1189,7 +1243,9 @@ private fun SettingsScreenPreview() {
                 ccEmails = listOf("cc1@example.com"),
                 enabled = true,
                 healthReportEnabled = false,
-                healthReportIntervalHours = 1
+                healthReportIntervalHours = 1,
+                batchDelayEnabled = false,
+                batchDelaySeconds = 30
             ),
             notificationFilterSettings = NotificationFilterSettings(
                 mode = NotificationFilterMode.BLACKLIST

@@ -30,6 +30,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
+import androidx.core.app.NotificationCompat
+
 private const val NOTIFICATION_DEDUPE_WINDOW_MILLIS = 8_000L
 private const val NOTIFICATION_HASH_WINDOW_MILLIS = 5_000L
 private const val NOTIFICATION_QUEUE_DEBOUNCE_MILLIS = 750L
@@ -42,6 +44,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
     }
     private val notificationProcessor: NotificationEventProcessor by lazy {
         EmailingNotificationEventProcessor(
+            context = applicationContext,
             queueManager = applicationContext.appContainer.eventBatchQueueManager,
             logRepository = applicationContext.appContainer.logRepository
         )
@@ -259,11 +262,26 @@ class PhoneNotificationListenerService : NotificationListenerService() {
 
     private fun StatusBarNotification.toNotificationEvent(): NotificationEvent {
         val extras = notification.extras ?: Bundle.EMPTY
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()
-        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
-        val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
-        val category = notification.category
+        
+        val payload = NotificationPayloadResolver.resolve(
+            titleCandidates = listOf(
+                extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+                extras.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString(),
+                extras.getCharSequence("android.conversationTitle")?.toString(),
+                extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
+            ),
+            bodyCandidates = listOf(
+                extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+                extractMessagingStyleBody(extras),
+                extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+                extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                    ?.map(CharSequence::toString)
+                    ?.joinToString(separator = "\n"),
+                extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString(),
+                extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString(),
+            )
+        )
+
         val appLabel = packageManager.safeApplicationLabel(packageName)
 
         return NotificationEvent(
@@ -276,17 +294,29 @@ class PhoneNotificationListenerService : NotificationListenerService() {
             } else {
                 null
             },
-            category = category,
-            title = title,
-            text = text,
-            bigText = bigText,
-            subText = subText,
+            category = notification.category,
+            title = payload.title,
+            text = payload.body,
+            bigText = null, // Content is now merged into text
+            subText = null,
+            subscriptionId = extras.getInt("subscription", -1).takeIf { it != -1 }
+                ?: extras.getInt("android.subId", -1).takeIf { it != -1 },
             postTimeMillis = postTime,
             receivedAtMillis = System.currentTimeMillis(),
             isOngoing = isOngoing,
             isClearable = isClearable
         )
     }
+
+    private fun extractMessagingStyleBody(extras: Bundle): String? = runCatching {
+        val messagingStyle = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(
+            NotificationCompat.Builder(applicationContext, "").setExtras(extras).build()
+        )
+        messagingStyle?.messages?.mapNotNull { it.text?.toString() }
+            ?.distinct()
+            ?.joinToString(separator = "\n")
+            ?.ifBlank { null }
+    }.getOrNull()
 
     private fun android.content.pm.PackageManager.safeApplicationLabel(targetPackage: String): String {
         return runCatching {
@@ -316,6 +346,19 @@ class PhoneNotificationListenerService : NotificationListenerService() {
             return enabledListeners.contains(context.packageName)
         }
     }
+}
+
+object NotificationPayloadResolver {
+    fun resolve(
+        titleCandidates: List<String?>,
+        bodyCandidates: List<String?>
+    ): Payload {
+        val title = titleCandidates.firstOrNull { !it.isNullOrBlank() }?.trim()
+        val body = bodyCandidates.firstOrNull { !it.isNullOrBlank() }?.trim()
+        return Payload(title, body)
+    }
+
+    data class Payload(val title: String?, val body: String?)
 }
 
 /**
@@ -353,7 +396,8 @@ object NotificationClassifier {
 
         return when {
             packageName in knownSms -> EventType.SMS
-            packageName in voipApps -> EventType.CALL
+            // Only label as CALL for VoIP apps if it's explicitly a call category
+            packageName in voipApps && (category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_MISSED_CALL) -> EventType.CALL
             category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_MISSED_CALL -> EventType.CALL
             contentResolver != null && isSystemDialer(packageName, contentResolver) -> EventType.CALL
             else -> null
@@ -372,6 +416,7 @@ data class NotificationEvent(
     val text: String?,
     val bigText: String?,
     val subText: String?,
+    val subscriptionId: Int?,
     val postTimeMillis: Long,
     val receivedAtMillis: Long,
     val isOngoing: Boolean,
@@ -477,6 +522,7 @@ class LoggingNotificationEventProcessor : NotificationEventProcessor {
 }
 
 class EmailingNotificationEventProcessor(
+    private val context: Context,
     private val queueManager: com.notify2email.app.email.EventBatchQueueManager,
     private val logRepository: LogRepository
 ) : NotificationEventProcessor {
@@ -485,16 +531,37 @@ class EmailingNotificationEventProcessor(
         val finalType = overrideType ?: EventType.NOTIFICATION
         Log.i(TAG, "Captured notification from ${event.packageName} with key=${event.notificationKey} (as $finalType)")
         
+        val container = context.appContainer
+        val settings = container.settingsRepository.getSettings()
+        
         val appName = event.appName.ifBlank { event.packageName }
-        val source = if (finalType == EventType.NOTIFICATION) appName else (event.title ?: appName)
+        
+        var sourceName = if (finalType == EventType.NOTIFICATION) appName else (event.title ?: appName)
+        
+        if (settings.resolveContactNames && (finalType == EventType.CALL || finalType == EventType.SMS)) {
+            val resolved = container.contactNameResolver.resolve(event.title ?: event.text)
+            if (resolved != null) {
+                sourceName = "$resolved (${event.title ?: event.text})"
+            }
+        }
+
+        val simInfo = if (settings.showSimInfo && event.subscriptionId != null) {
+            container.simSlotResolver.resolveBestEffort(subscriptionId = event.subscriptionId)
+        } else null
+
+        val simSuffix = if (settings.showSimInfo) {
+            simInfo?.displayName?.let { " [$it]" } ?: (if (event.subscriptionId != null) " [SIM ${event.subscriptionId}]" else "")
+        } else ""
 
         logRepository.addLog(
-            "$TAG: event captured from $source (as $finalType)."
+            "$TAG: event captured from $sourceName$simSuffix (as $finalType)."
         )
+
+        val detailBody = buildEmailBody(event, finalType, settings)
 
         queueManager.enqueue(
             BatchQueueEvent(
-                sourceTag = source,
+                sourceTag = sourceName + simSuffix,
                 enabledKey = when (finalType) {
                     EventType.SMS -> SmtpConfigProvider.KEY_SMS_ENABLED
                     EventType.CALL -> SmtpConfigProvider.KEY_CALL_LOGS_ENABLED
@@ -503,20 +570,36 @@ class EmailingNotificationEventProcessor(
                 eventType = finalType,
                 identity = event.notificationKey,
                 contentPreview = event.bestAvailableMessage.ifBlank { "No message available" },
-                detailBody = buildEmailBody(event, finalType),
+                detailBody = detailBody,
                 timestampMillis = event.receivedAtMillis,
                 dedupeKey = event.batchDedupeKey
             )
         )
     }
 
-    private fun buildEmailBody(event: NotificationEvent, type: EventType): String {
+    private fun buildEmailBody(event: NotificationEvent, type: EventType, settings: com.notify2email.app.domain.model.SmtpSettings): String {
+        val container = context.appContainer
         val appName = event.appName.ifBlank { event.packageName }
-        val source = if (type == EventType.NOTIFICATION) appName else (event.title ?: appName)
+        var source = if (type == EventType.NOTIFICATION) appName else (event.title ?: appName)
+        
+        if (settings.resolveContactNames && (type == EventType.CALL || type == EventType.SMS)) {
+            val resolved = container.contactNameResolver.resolve(event.title ?: event.text)
+            if (resolved != null) {
+                source = "$resolved (${event.title ?: event.text})"
+            }
+        }
+
+        val simInfo = if (settings.showSimInfo && event.subscriptionId != null) {
+            container.simSlotResolver.resolveBestEffort(subscriptionId = event.subscriptionId)
+        } else null
+
+        val simSuffix = if (settings.showSimInfo) {
+            simInfo?.displayName?.let { " [$it]" } ?: (if (event.subscriptionId != null) " [SIM ${event.subscriptionId}]" else "")
+        } else ""
         
         return EventFormatter.formatEventHtml(
             type = type,
-            source = source,
+            source = source + simSuffix,
             timestampMillis = event.postTimeMillis.takeIf { it > 0 } ?: event.receivedAtMillis,
             content = event.bestAvailableMessage.ifBlank { "No message available" }
         )

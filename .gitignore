@@ -33,3 +33,6 @@ architecture.md
 
 # Logs
 *.log
+
+# Temp/External Projects
+temp/
