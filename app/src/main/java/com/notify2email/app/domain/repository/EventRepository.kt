@@ -13,4 +13,5 @@ interface EventRepository {
     suspend fun deleteEvent(id: String)
     suspend fun deleteAllEvents()
     fun observeOldestQueueTime(): Flow<Long?>
+    suspend fun hasRecentCall(withinMillis: Long): Boolean
 }

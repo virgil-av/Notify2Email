@@ -64,10 +64,11 @@ class SettingsViewModel(
             _uiState.update { it.copy(isSaving = true) }
             settingsRepository.saveSettings(normalizedSettings)
             
-            // Re-schedule health report in case interval or enabled status changed
+            // Re-schedule health report in case interval, start time or enabled status changed
             WorkScheduler.scheduleHealthReport(
                 context = context,
                 intervalHours = normalizedSettings.healthReportIntervalHours,
+                startTime = normalizedSettings.healthReportStartTime,
                 enabled = normalizedSettings.healthReportEnabled
             )
 

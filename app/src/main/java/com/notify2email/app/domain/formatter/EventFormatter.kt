@@ -60,8 +60,8 @@ object EventFormatter {
                                 <td class="value">${source.ifBlank { "Unknown" }}</td>
                             </tr>
                             <tr>
-                                <td class="label">RECEIVED</td>
-                                <td class="value">$readableTime</td>
+                                <td class="label">GENERATED at</td>
+                                <td class="value">$readableTime (local)</td>
                             </tr>
                         </table>
                         
@@ -132,7 +132,7 @@ object EventFormatter {
                     <div class="content">
                         <div class="stats">
                             <span><b>$totalCount</b> events captured</span>
-                            <span>$readableTime</span>
+                            <span>GENERATED at $readableTime (local)</span>
                             <br>
                         </div>
                         <br>

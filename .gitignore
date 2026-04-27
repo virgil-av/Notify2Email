@@ -29,6 +29,7 @@ RULES.md
 TASK.md
 AGENT_MODE.md
 architecture.md
+*.artifact.md
 
 # Logs
 *.log

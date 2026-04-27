@@ -1,6 +1,7 @@
 package com.notify2email.app.ui.settings
 
 import android.Manifest
+import android.app.TimePickerDialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -215,6 +217,9 @@ private fun SmtpSection(
     var enabled by remember(settings) { mutableStateOf(settings.enabled) }
     var healthReportEnabled by remember(settings) { mutableStateOf(settings.healthReportEnabled) }
     var healthReportIntervalHours by remember(settings) { mutableStateOf(settings.healthReportIntervalHours) }
+    var healthReportStartTime by remember(settings) { mutableStateOf(settings.healthReportStartTime) }
+    var callDetectionFailsafeEnabled by remember(settings) { mutableStateOf(settings.callDetectionFailsafeEnabled) }
+    var batchDelaySeconds by remember(settings) { mutableStateOf(settings.batchDelaySeconds) }
 
     // Auto-update encryption based on port
     androidx.compose.runtime.LaunchedEffect(port) {
@@ -298,7 +303,10 @@ private fun SmtpSection(
         callsEnabled = settings.callsEnabled,
         notificationsEnabled = settings.notificationsEnabled,
         healthReportEnabled = healthReportEnabled,
-        healthReportIntervalHours = healthReportIntervalHours
+        healthReportIntervalHours = healthReportIntervalHours,
+        healthReportStartTime = healthReportStartTime,
+        callDetectionFailsafeEnabled = callDetectionFailsafeEnabled,
+        batchDelaySeconds = batchDelaySeconds
     )
 
     Column(
@@ -599,6 +607,105 @@ private fun SmtpSection(
         )
 
         Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Call Detection Failsafe", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = { onShowInfo("Call Detection Failsafe", "On some multi-SIM devices, the system may fail to record calls in the official Call Log. When enabled, this failsafe monitors dialer notifications as a backup to ensure missed calls are still captured and emailed.") },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                ListItem(
+                    headlineContent = { Text("Use Backup Monitoring") },
+                    supportingContent = { Text("Detect calls via notifications if log entry is missing.") },
+                    trailingContent = { 
+                        Switch(
+                            checked = callDetectionFailsafeEnabled, 
+                            onCheckedChange = { callDetectionFailsafeEnabled = it } 
+                        ) 
+                    },
+                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                )
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Batching Delay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = { onShowInfo("Batching Delay", "Determines how long the app waits to group multiple notifications into a single email. Critical events like SMS and Calls are always sent immediately.") },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Text("Delay Timer (Seconds)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    IconButton(
+                        onClick = { if (batchDelaySeconds > 0) batchDelaySeconds -= 5 },
+                        enabled = batchDelaySeconds > 0
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                    }
+
+                    Text(
+                        text = batchDelaySeconds.toString(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+
+                    IconButton(
+                        onClick = { if (batchDelaySeconds < 60) batchDelaySeconds += 5 },
+                        enabled = batchDelaySeconds < 60
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Increase")
+                    }
+                }
+            }
+        }
+
+        Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.1f))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -666,6 +773,36 @@ private fun SmtpSection(
                             Icon(Icons.Default.Add, contentDescription = "Increase")
                         }
                     }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text("First Report Start Time", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary)
+
+                    OutlinedTextField(
+                        value = healthReportStartTime,
+                        onValueChange = { },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        label = { Text("Start Time (HH:mm)") },
+                        trailingIcon = {
+                            val timeParts = healthReportStartTime.split(":")
+                            val currentHour = timeParts.getOrNull(0)?.toIntOrNull() ?: 9
+                            val currentMinute = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
+
+                            val timePickerDialog = TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    healthReportStartTime = String.format("%02d:%02d", hour, minute)
+                                },
+                                currentHour,
+                                currentMinute,
+                                true
+                            )
+
+                            IconButton(onClick = { timePickerDialog.show() }) {
+                                Icon(Icons.Default.Schedule, contentDescription = "Select Time")
+                            }
+                        }
+                    )
                 }
             }
         }

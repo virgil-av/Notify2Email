@@ -46,4 +46,9 @@ class RoomEventRepository(
     override fun observeOldestQueueTime(): Flow<Long?> {
         return queueDao.observeOldestEnqueuedAt()
     }
+
+    override suspend fun hasRecentCall(withinMillis: Long): Boolean {
+        val since = System.currentTimeMillis() - withinMillis
+        return eventDao.countRecentCalls(since) > 0
+    }
 }

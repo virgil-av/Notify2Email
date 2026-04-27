@@ -46,6 +46,9 @@ class SharedPreferencesSettingsRepository(
             .putString(KEY_APP_THEME, normalizedSettings.appTheme.name)
             .putBoolean(KEY_HEALTH_REPORT_ENABLED, normalizedSettings.healthReportEnabled)
             .putInt(KEY_HEALTH_REPORT_INTERVAL, normalizedSettings.healthReportIntervalHours)
+            .putString(KEY_HEALTH_REPORT_START_TIME, normalizedSettings.healthReportStartTime)
+            .putBoolean(KEY_CALL_FAILSAFE_ENABLED, normalizedSettings.callDetectionFailsafeEnabled)
+            .putInt(KEY_BATCH_DELAY, normalizedSettings.batchDelaySeconds)
             .apply()
 
         settingsFlow.value = readSettings()
@@ -96,7 +99,10 @@ class SharedPreferencesSettingsRepository(
                 )
             }.getOrDefault(AppTheme.LIGHT),
             healthReportEnabled = preferences.getBoolean(KEY_HEALTH_REPORT_ENABLED, false),
-            healthReportIntervalHours = preferences.getInt(KEY_HEALTH_REPORT_INTERVAL, 1)
+            healthReportIntervalHours = preferences.getInt(KEY_HEALTH_REPORT_INTERVAL, 1),
+            healthReportStartTime = preferences.getString(KEY_HEALTH_REPORT_START_TIME, "09:00") ?: "09:00",
+            callDetectionFailsafeEnabled = preferences.getBoolean(KEY_CALL_FAILSAFE_ENABLED, false),
+            batchDelaySeconds = preferences.getInt(KEY_BATCH_DELAY, 30)
         )
     }
 
@@ -115,6 +121,9 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_APP_THEME = "app_theme"
         private const val KEY_HEALTH_REPORT_ENABLED = "health_report_enabled"
         private const val KEY_HEALTH_REPORT_INTERVAL = "health_report_interval"
+        private const val KEY_HEALTH_REPORT_START_TIME = "health_report_start_time"
+        private const val KEY_CALL_FAILSAFE_ENABLED = "call_failsafe_enabled"
+        private const val KEY_BATCH_DELAY = "batch_delay_seconds"
         private const val DEFAULT_SMTP_PORT = 587
     }
 }
