@@ -666,7 +666,7 @@ private fun FooterSection() {
         }
         
         Text(
-            text = "Version 1.1.1",
+            text = "Version 1.2.0",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
