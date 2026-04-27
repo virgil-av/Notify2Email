@@ -37,7 +37,7 @@ class HealthReportWorker(
 
         val reportContent = buildString {
             append("Battery: $batteryLevel% (${if (isCharging) "Charging" else "Discharging"})\n")
-            append("Screen: ${if (isScreenOn) "ON" else "OFF"}\n")
+            append("Screen: ${if (isScreenOn) "ON" else "OFF"}\n\n")
             append("Active Notifications (${notifications.size}):\n")
             notifications.forEach { append("- $it\n") }
         }
@@ -50,7 +50,7 @@ class HealthReportWorker(
 
         val htmlBody = EventFormatter.formatEventHtml(
             type = EventType.NOTIFICATION, // Using NOTIFICATION as a base type for the health report
-            source = "Health System",
+            source = "System Health Monitor",
             timestampMillis = System.currentTimeMillis(),
             content = reportContent.replace("\n", "<br>")
         )
