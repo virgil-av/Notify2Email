@@ -28,4 +28,7 @@ interface EventDao {
 
     @Query("SELECT COUNT(*) FROM events WHERE type = :type AND sentStatus = :sentStatus")
     suspend fun countByTypeAndStatus(type: String, sentStatus: String): Int
+
+    @Query("SELECT COUNT(*) FROM events WHERE type = 'CALL' AND timestamp >= :sinceMillis")
+    suspend fun countRecentCalls(sinceMillis: Long): Int
 }

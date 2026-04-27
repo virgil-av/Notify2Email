@@ -80,8 +80,13 @@ class EventBatchQueueManager(
         logRepository.addLog("${event.sourceTag}: queued ${event.eventType.name.lowercase()} event for batching.")
 
         stateMutex.withLock {
-            if (!isFlushing && flushJob?.isActive != true) {
-                scheduleNextFlushLocked()
+            if (!isFlushing) {
+                if (event.eventType == EventType.CALL || event.eventType == EventType.SMS) {
+                    flushJob?.cancel()
+                    flushJob = scope.launch { flushBatch() }
+                } else if (flushJob?.isActive != true) {
+                    scheduleNextFlushLocked()
+                }
             }
         }
     }
@@ -105,7 +110,8 @@ class EventBatchQueueManager(
 
     private suspend fun scheduleNextFlushLocked() {
         val oldestEnqueuedAt = queueDao.getOldestEnqueuedAt() ?: return
-        val delayMillis = (oldestEnqueuedAt + BATCH_WINDOW_MS - System.currentTimeMillis()).coerceAtLeast(0L)
+        val batchDelayMs = configProvider.getBatchDelaySeconds() * 1000L
+        val delayMillis = (oldestEnqueuedAt + batchDelayMs - System.currentTimeMillis()).coerceAtLeast(0L)
 
         flushJob = scope.launch {
             delay(delayMillis)
@@ -214,7 +220,6 @@ class EventBatchQueueManager(
 
     companion object {
         private const val TAG = "EventBatchQueue"
-        private const val BATCH_WINDOW_MS = 60_000L
         private const val NOTIFICATION_DEDUPE_WINDOW_MS = 60_000L
         private const val SMS_DEDUPE_WINDOW_MS = 60_000L
         private const val CALL_DEDUPE_WINDOW_MS = 60_000L

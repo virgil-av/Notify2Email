@@ -19,5 +19,8 @@ data class SmtpSettings(
     val notificationsEnabled: Boolean = true,
     val appTheme: AppTheme = AppTheme.LIGHT,
     val healthReportEnabled: Boolean = false,
-    val healthReportIntervalHours: Int = 1
+    val healthReportIntervalHours: Int = 1,
+    val healthReportStartTime: String = "09:00",
+    val callDetectionFailsafeEnabled: Boolean = false,
+    val batchDelaySeconds: Int = 30
 )

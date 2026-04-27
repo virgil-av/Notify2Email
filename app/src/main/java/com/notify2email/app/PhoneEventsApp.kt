@@ -26,6 +26,7 @@ class PhoneEventsApp : Application(), Configuration.Provider {
             WorkScheduler.scheduleHealthReport(
                 context = this@PhoneEventsApp,
                 intervalHours = settings.healthReportIntervalHours,
+                startTime = settings.healthReportStartTime,
                 enabled = settings.healthReportEnabled
             )
         }

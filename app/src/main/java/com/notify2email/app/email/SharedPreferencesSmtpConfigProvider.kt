@@ -7,6 +7,7 @@ interface SmtpConfigProvider {
     fun getEmailSettings(enabledKey: String = KEY_EMAIL_ENABLED): EmailSettings?
     fun isFeatureEnabled(key: String): Boolean
     fun isSmtpConfigured(): Boolean
+    fun getBatchDelaySeconds(): Int
 
     companion object {
         const val KEY_EMAIL_ENABLED = "email_enabled"
@@ -112,6 +113,10 @@ class SharedPreferencesSmtpConfigProvider(
         )
     }
 
+    override fun getBatchDelaySeconds(): Int {
+        return preferences.getInt(KEY_BATCH_DELAY, 30)
+    }
+
     companion object {
         private const val PREFS_NAME = "smtp_settings"
         private const val KEY_HOST = "smtp_host"
@@ -124,6 +129,7 @@ class SharedPreferencesSmtpConfigProvider(
         private const val KEY_CC_ADDRESSES = "smtp_cc_addresses"
         private const val KEY_BCC_ADDRESSES = "smtp_bcc_addresses"
         private const val KEY_SUBJECT_PATTERN = "smtp_subject_pattern"
+        private const val KEY_BATCH_DELAY = "batch_delay_seconds"
         private const val DEFAULT_PORT = 587
     }
 }

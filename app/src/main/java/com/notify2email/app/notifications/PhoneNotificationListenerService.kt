@@ -15,6 +15,10 @@ import com.notify2email.app.email.BatchQueueEvent
 import com.notify2email.app.domain.model.EventType
 import com.notify2email.app.domain.repository.LogRepository
 import com.notify2email.app.email.SmtpConfigProvider
+import com.notify2email.app.domain.repository.EventRepository
+import com.notify2email.app.domain.repository.SettingsRepository
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -145,6 +149,7 @@ class PhoneNotificationListenerService : NotificationListenerService() {
 
         // 8. Capture Success - Dispatch for processing
         serviceScope.launch {
+            checkCallFailsafe(event, eventType)
             container.logRepository.addLog("$DEBUG_PREFIX captured notification from $appName.")
             runCatching {
                 delay(NOTIFICATION_QUEUE_DEBOUNCE_MILLIS)
@@ -207,6 +212,49 @@ class PhoneNotificationListenerService : NotificationListenerService() {
 
         val previousSeenAt = recentNotificationWindows.putIfAbsent(event.windowedHash, now)
         return previousSeenAt != null && now - previousSeenAt <= NOTIFICATION_DEDUPE_WINDOW_MILLIS
+    }
+
+    private suspend fun checkCallFailsafe(event: NotificationEvent, eventType: EventType) {
+        val container = applicationContext.appContainer
+        val settings = container.settingsRepository.getSettings()
+
+        if (!settings.callDetectionFailsafeEnabled) return
+
+        // Only trigger for "Missed call" notifications from dialers
+        val body = event.bestAvailableMessage.lowercase()
+        val isMissedCallNotif = body.contains("missed call") || body.contains("missed")
+
+        if (eventType == EventType.CALL && isMissedCallNotif) {
+            // Check if we already have a CALL event in the last 5 minutes
+            val hasRecentCall = container.eventRepository.hasRecentCall(TimeUnit.MINUTES.toMillis(5))
+            
+            if (!hasRecentCall) {
+                container.logRepository.addLog("[FAILSAFE] Missed call notification detected but no call log record found. Triggering backup alert.")
+                
+                val source = (event.title ?: event.appName).ifBlank { "Unknown Caller" }
+                val failsafeContent = "[FAILSAFE] ${event.bestAvailableMessage}"
+                
+                container.eventBatchQueueManager.enqueue(
+                    BatchQueueEvent(
+                        sourceTag = source,
+                        enabledKey = SmtpConfigProvider.KEY_CALL_LOGS_ENABLED,
+                        eventType = EventType.CALL,
+                        identity = "failsafe_${event.notificationKey}",
+                        contentPreview = failsafeContent,
+                        detailBody = EventFormatter.formatEventHtml(
+                            type = EventType.CALL,
+                            source = source,
+                            timestampMillis = event.receivedAtMillis,
+                            content = failsafeContent,
+                            customTypeLabel = "MISSED CALL (FAILSAFE)"
+                        ),
+                        timestampMillis = event.receivedAtMillis,
+                        dedupeKey = "failsafe_${event.batchDedupeKey}",
+                        customTypeLabel = "MISSED CALL (FAILSAFE)"
+                    )
+                )
+            }
+        }
     }
 
     private fun StatusBarNotification.toNotificationEvent(): NotificationEvent {
