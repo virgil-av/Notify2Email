@@ -2,6 +2,7 @@ package com.notify2email.app.ui.settings
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -822,6 +823,7 @@ private fun AccessSection(
     val callLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
     val contactsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onPermissionsChanged() }
+    val roleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onPermissionsChanged() }
 
     Column(
         modifier = Modifier
@@ -874,7 +876,13 @@ private fun AccessSection(
             AccessCard(
                 title = "Call Screening",
                 isGranted = permissionState.callScreeningRoleGranted,
-                onClick = { PermissionNavigator.requestCallScreeningRole(context) },
+                onClick = { 
+                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as android.app.role.RoleManager
+                    if (roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_CALL_SCREENING)) {
+                        val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                        roleLauncher.launch(intent)
+                    }
+                },
                 onInfoClick = { onShowInfo("Call Screening", "Allows the app to capture and relay calls that might be blocked or screened by the system.") }
             )
         }
